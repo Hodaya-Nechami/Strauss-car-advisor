@@ -1,0 +1,4 @@
+# קבצי מקור: לא לשנות סופי שורות או קידוד
+*.csv -text
+*.xlsx binary
+*.pdf binary
