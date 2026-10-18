@@ -1,15 +1,20 @@
+import type Anthropic from "@anthropic-ai/sdk";
 import type { EmployeeProfile } from "@strauss/engine";
 
-/** מה שהבוט יודע על העובד בשיחה הנוכחית. נשמר במסד הנתונים (משימה N6). */
+/**
+ * כל מה שנשמר על שיחה אחת. נשמר במסד הנתונים כמו שהוא (משימה N6).
+ * messages היא ההיסטוריה המלאה שנשלחת ל-Claude: מוסיפים בסוף בלבד, ואף פעם לא עורכים הודעה קודמת.
+ */
 export interface SessionState {
   id: string;
   profile: Partial<EmployeeProfile>;
   /** שאלות שנשלחו לנציג ועוד לא נענו */
   pendingQuestions: { ticketId: string; about: string; question: string }[];
+  messages: Anthropic.Beta.BetaMessageParam[];
 }
 
 export function newSession(id: string): SessionState {
-  return { id, profile: {}, pendingQuestions: [] };
+  return { id, profile: {}, pendingQuestions: [], messages: [] };
 }
 
 /** שדות חובה לכל חישוב נטו, עם השם שלהם בעברית לשאלה לעובד */

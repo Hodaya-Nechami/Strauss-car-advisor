@@ -3,6 +3,7 @@
  * הבוט (מודל השפה) לא מחשב ולא קובע זכאות. הוא רק מפעיל את הכלים האלה ומציג את התוצאה.
  * ההגדרות כאן לא תלויות בספק מודל. החיבור ל-Vercel AI SDK נעשה בשלב הבא (A6).
  */
+import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import {
   carFromCatalog,
@@ -125,12 +126,12 @@ function presentComparison(c: Comparison, rules: Rules): Result {
   };
 }
 
-interface ToolDef<S extends z.ZodTypeAny> {
+interface ToolDef<S extends z.ZodType> {
   description: string;
   schema: S;
   run: (input: z.infer<S>, ctx: ToolContext) => Promise<Result>;
 }
-const def = <S extends z.ZodTypeAny>(t: ToolDef<S>) => t;
+const def = <S extends z.ZodType>(t: ToolDef<S>) => t;
 
 export const tools = {
   save_employee_profile: def({
@@ -150,6 +151,34 @@ export const tools = {
       const clean = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
       Object.assign(ctx.session.profile, clean);
       return { ok: true, profile: ctx.session.profile, missing: missingProfileFields(ctx.session.profile), warnings };
+    },
+  }),
+
+  list_occupations: def({
+    description:
+      "מחזיר את טבלת העיסוקים: קבוצת הזכאות של כל עיסוק, האם הרכב חובה, האם מותר לוותר ובכמה אחזקת רכב. " +
+      "משתמשים בזה כשהעובד לא יודע את קבוצת הזכאות שלו, או כדי לשמור את העיסוק בשם המדויק שבטבלה.",
+    schema: z.object({}),
+    run: async (_input, ctx) => ({ ok: true, occupations: ctx.occupations }),
+  }),
+
+  get_rules: def({
+    description:
+      "מחזיר את כללי החברה המעודכנים: תקציב לכל קבוצה, החזר חשמל, מסלול ברוכת ילדים, ויתור, ותקציב שלא נוצל. " +
+      "משתמשים בזה כדי להסביר כללים לעובד. לא משתמשים בזה כדי לחשב נטו.",
+    schema: z.object({}),
+    run: async (_input, ctx) => {
+      const r = ctx.rules;
+      return {
+        ok: true,
+        budgets: r.budgets,
+        chooseFrom: "אפשר לבחור רכב מהקבוצה שלך או מקבוצה נמוכה ממנה, לא מקבוצה גבוהה",
+        electric: `רכב חשמלי מקבל החזר חשמל של ${r.electric.netBonus} ₪ ${r.electric.method === "gross_up" ? "נטו (מגולם)" : "ברוטו"} בחודש`,
+        electricDrives: r.electric.eligibleDrives ?? ["חשמלי"],
+        familyTrack: `מסלול ברוכת ילדים: ${r.familyTrack.minChildren} ילדים ומעלה עד גיל ${r.familyTrack.childMaxAge}. על הפער מעל תקציב הקבוצה העובד משלם ${Math.round(r.familyTrack.gapSplitEmployee * 100)}% והמעסיק את השאר`,
+        waiver: "ויתור על רכב רק בעיסוקים שמאפשרים זאת. במקום רכב מקבלים אחזקת רכב לפי טבלת העיסוקים. האחזקה חייבת במס ולא נכנסת לפנסיה",
+        unusedBudget: "תקציב רכב שלא נוצל לא הופך לכסף בשכר",
+      };
     },
   }),
 
@@ -282,11 +311,24 @@ const placeholderSalary = {
 export type ToolName = keyof typeof tools;
 
 /**
+ * הגדרות הכלים כמו ש-Claude מקבל אותן. נבנות פעם אחת ונשארות זהות לאורך כל השיחה:
+ * שינוי ברשימת הכלים באמצע שיחה פוסל את ה"חשיבה" השמורה של המודל ואת ה-cache.
+ */
+export const toolDefinitions: Anthropic.Beta.BetaTool[] = Object.entries(tools).map(([name, t]) => {
+  const { $schema: _ignored, ...schema } = z.toJSONSchema(t.schema) as Record<string, unknown>;
+  return {
+    name,
+    description: t.description,
+    input_schema: { ...schema, type: "object" } as Anthropic.Beta.BetaTool.InputSchema,
+  };
+});
+
+/**
  * מפעיל כלי לפי שם: בודק את הקלט, מריץ, רושם ביומן.
  * שגיאה לא מפילה את השיחה. היא חוזרת לבוט כדי שיתקן.
  */
 export async function runTool(name: string, rawInput: unknown, ctx: ToolContext): Promise<Result> {
-  const registry = tools as unknown as Record<string, ToolDef<z.ZodTypeAny> | undefined>;
+  const registry = tools as unknown as Record<string, ToolDef<z.ZodType> | undefined>;
   const tool = Object.hasOwn(registry, name) ? registry[name] : undefined;
   let output: Result;
   if (!tool) {
