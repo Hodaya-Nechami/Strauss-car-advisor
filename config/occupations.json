@@ -1,0 +1,100 @@
+[
+  {
+    "name": "נציג/ת מכירות שטח",
+    "group": "ב",
+    "carMandatory": true,
+    "waiverAllowed": false,
+    "waiverMaintenance": 0
+  },
+  {
+    "name": "מנהל/ת אזור מכירות",
+    "group": "ג",
+    "carMandatory": true,
+    "waiverAllowed": false,
+    "waiverMaintenance": 0
+  },
+  {
+    "name": "טכנאי/ת שירות",
+    "group": "א",
+    "carMandatory": true,
+    "waiverAllowed": false,
+    "waiverMaintenance": 0
+  },
+  {
+    "name": "נהג/ת הפצה",
+    "group": "א",
+    "carMandatory": true,
+    "waiverAllowed": false,
+    "waiverMaintenance": 0
+  },
+  {
+    "name": "מפקח/ת איכות במפעל",
+    "group": "א",
+    "carMandatory": false,
+    "waiverAllowed": true,
+    "waiverMaintenance": 1200
+  },
+  {
+    "name": "רכז/ת רכש",
+    "group": "א",
+    "carMandatory": false,
+    "waiverAllowed": true,
+    "waiverMaintenance": 1200
+  },
+  {
+    "name": "מהנדס/ת תהליך",
+    "group": "ב",
+    "carMandatory": false,
+    "waiverAllowed": true,
+    "waiverMaintenance": 1500
+  },
+  {
+    "name": "מפתח/ת תוכנה",
+    "group": "ב",
+    "carMandatory": false,
+    "waiverAllowed": true,
+    "waiverMaintenance": 1500
+  },
+  {
+    "name": "אנליסט/ית נתונים",
+    "group": "ב",
+    "carMandatory": false,
+    "waiverAllowed": true,
+    "waiverMaintenance": 1500
+  },
+  {
+    "name": "מנהל/ת מוצר",
+    "group": "ג",
+    "carMandatory": false,
+    "waiverAllowed": true,
+    "waiverMaintenance": 2000
+  },
+  {
+    "name": "מנהל/ת פיתוח",
+    "group": "ג",
+    "carMandatory": false,
+    "waiverAllowed": true,
+    "waiverMaintenance": 2000
+  },
+  {
+    "name": "מנהל/ת משאבי אנוש",
+    "group": "ג",
+    "carMandatory": false,
+    "waiverAllowed": true,
+    "waiverMaintenance": 2000
+  },
+  {
+    "name": "מנהל/ת מחלקה",
+    "group": "ד",
+    "carMandatory": false,
+    "waiverAllowed": true,
+    "waiverMaintenance": 2600
+  },
+  {
+    "name": "מנהל/ת חטיבה",
+    "group": "ד",
+    "carMandatory": false,
+    "waiverAllowed": true,
+    "waiverMaintenance": 3000
+  }
+]

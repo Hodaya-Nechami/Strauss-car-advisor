@@ -1,0 +1,20 @@
+{
+  "name": "strauss-car-advisor",
+  "private": true,
+  "description": "יועץ הרכב של שטראוס - האקתון AI קוד פתוח 2026",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p packages/engine",
+    "config:build": "python scripts/excel-to-json.py ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
