@@ -1,6 +1,6 @@
 /**
  * נקודת הכניסה של הבוט, בלי תלות במודל.
- * free: שרשרת ספקים חינמיים (Gemini, Groq, OpenRouter) שמחליפים זה את זה כשהמכסה נגמרת.
+ * free: שרשרת ספקים חינמיים (Gemini, Cohere, Mistral, OpenRouter, Groq) שמחליפים זה את זה כשהמכסה נגמרת.
  * claude: Claude בתשלום. נבחר רק אם הוגדר לו מפתח ואין מפתחות חינמיים, או אם LLM_PROVIDER=claude.
  * בכל המצבים: אותם כלים ואותו מנוע.
  */
@@ -22,6 +22,7 @@ import {
   continueFree,
   createFreeProviders,
   parseGeminiError,
+  providerErrorDetail,
   type FailureKind,
   type FreeOptions,
 } from "./free";
@@ -92,7 +93,7 @@ export async function resumeWithRepAnswer(
   return continueClaude(ctx, opts);
 }
 
-const FREE_KEYS = ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"] as const;
+const FREE_KEYS = ["GEMINI_API_KEY", "COHERE_API_KEY", "MISTRAL_API_KEY", "OPENROUTER_API_KEY", "GROQ_API_KEY"] as const;
 
 /** באיזה מצב לעבוד לפי הסביבה. מפתחות חינמיים קודמים ל-Claude, אלא אם LLM_PROVIDER=claude. */
 export function resolveMode(env: Record<string, string | undefined>): Mode | null {
@@ -105,7 +106,7 @@ export function resolveMode(env: Record<string, string | undefined>): Mode | nul
 const NO_KEY_HELP =
   "חסר מפתח API. הדרך החינמית: מפתח של Gemini מהאתר aistudio.google.com, בלי כרטיס אשראי. " +
   "כתבו אותו בקובץ apps/web/.env בשורה GEMINI_API_KEY=המפתח, והפעילו את השרת מחדש. " +
-  "אפשר להוסיף גם GROQ_API_KEY ו-OPENROUTER_API_KEY, והבוט יעבור ביניהם לבד כשהמכסה נגמרת.";
+  "אפשר להוסיף גם מפתחות של Cohere, Mistral ו-OpenRouter, והבוט יעבור ביניהם לבד כשהמכסה נגמרת.";
 
 /** בונה את הגדרות הבוט מהסביבה, כולל הלקוחות של המודלים */
 export function createAgentOptionsFromEnv(env: Record<string, string | undefined> = process.env): AgentOptions {
@@ -145,7 +146,9 @@ export function describeAgentError(err: unknown): { status: number; message: str
         message: `כל המפתחות החינמיים הגיעו למכסה כרגע (${names}). חכו דקה ונסו שוב. אם נגמרה המכסה היומית, היא מתחדשת מחר.`,
       };
     }
-    const details = err.failures.map((f) => `${f.provider} ${FAILURE_WORDS[f.kind]}`).join(", ");
+    const details = err.failures
+      .map((f) => `${f.provider} ${FAILURE_WORDS[f.kind]}${f.kind === "bad_request" ? ` (${providerErrorDetail(f.error)})` : ""}`)
+      .join(", ");
     const filterHint = err.failures.some((f) => f.kind === "filtered")
       ? " ספק שחסום בסינון האינטרנט אפשר לבקש לפתוח אצל ספק הסינון, למשל נטפרי."
       : "";

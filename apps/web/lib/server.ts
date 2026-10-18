@@ -78,7 +78,7 @@ interface ServerState {
  * מצב אחד לכל תהליך שרת. נשמר על globalThis כדי לשרוד טעינה מחדש של קוד בזמן פיתוח.
  * כשמבנה השיחות משתנה, מעלים את הגרסה במפתח: השרת מתחיל מזיכרון נקי במקום לקרוס על שיחות במבנה ישן.
  */
-export const STATE_KEY = "__straussState_v3";
+export const STATE_KEY = "__straussState_v4";
 
 function state(): ServerState {
   const g = globalThis as unknown as Record<string, ServerState | undefined>;

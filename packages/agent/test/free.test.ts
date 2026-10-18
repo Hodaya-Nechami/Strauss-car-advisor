@@ -167,7 +167,8 @@ describe("Gemini לבד", () => {
     expect(ctx.session.mode).toBe("free");
     expect(ctx.session.profile).toMatchObject({ group: "ג", baseSalary: 14200 });
 
-    expect(g.requests[0].model).toBe("gemini-2.5-flash");
+    expect(g.requests[0].model).toBe("gemini-3.8-flash");
+    expect(g.requests[0].config.thinkingConfig).toEqual({ thinkingLevel: "LOW" });
     expect(g.requests[0].config.systemInstruction).toBe(SYSTEM_PROMPT);
     const contents = g.requests[1].contents;
     expect(contents.map((c: any) => c.role)).toEqual(["user", "model", "user"]);
@@ -248,13 +249,26 @@ describe("Groq לבד (פורמט OpenAI)", () => {
 
     const msgs = q.requests[1].messages;
     expect(msgs.map((m: any) => m.role)).toEqual(["system", "user", "assistant", "tool"]);
+    // מזהה של 9 תווים, אותיות וספרות: הפורמט שגם Mistral מקבל
     expect(msgs[2].tool_calls[0]).toEqual({
-      id: "call_1",
+      id: "c00000001",
       type: "function",
       function: { name: "save_employee_profile", arguments: JSON.stringify({ group: "ג" }) },
     });
-    expect(msgs[3].tool_call_id).toBe("call_1");
+    expect(msgs[2].content).toBe("");
+    expect(msgs[3].tool_call_id).toBe("c00000001");
     expect(msgs.some((m: any) => "name" in m)).toBe(false);
+    expect("models" in q.requests[0]).toBe(false);
+  });
+
+  it("OpenRouter: שולח רשימת מודלים חלופיים, והשרת שלו עובר ביניהם", async () => {
+    const s = scripted([oReply("שלום!")]);
+    const client = { chat: { completions: { create: s.next } } } as unknown as OpenAICompatClient;
+    const provider = openAICompatProvider("openrouter", "OpenRouter", client, "a:free", ["b:free", "c:free"]);
+
+    await runTurn(makeCtx(), "שלום", freeOptions([provider]));
+    expect(s.requests[0].model).toBe("a:free");
+    expect(s.requests[0].models).toEqual(["a:free", "b:free", "c:free"]);
   });
 
   it("ארגומנטים שבורים: מבקש שוב בלי לשמור", async () => {
@@ -307,15 +321,31 @@ describe("מעבר אוטומטי בין ספקים", () => {
     expect(JSON.parse(msgs[3].content).ok).toBe(true);
   });
 
-  it("היסטוריה שנכתבה ב-Groq מתורגמת ל-Gemini בלי מזהים זרים", async () => {
+  it("קריאות לכלים שספק אחר כתב מגיעות ל-Gemini כטקסט, בלי חתימות חסרות", async () => {
     const ctx = makeCtx();
     const q = fakeGroq([oReply(null, [{ name: "list_catalog", args: {} }]), oReply("הנה הקטלוג")]);
     await runTurn(ctx, "קבוצה ג", freeOptions([q.provider]));
 
     const contents = toGeminiContents(ctx.session.log);
     expect(contents.map((c) => c.role)).toEqual(["user", "model", "user", "model"]);
-    expect(contents[1]!.parts![0]!.functionCall).toEqual({ name: "list_catalog", args: {} });
-    expect(contents[2]!.parts![0]!.functionResponse!.id).toBeUndefined();
+    expect(contents[1]!.parts![0]!.text).toBe("[קריאה לכלי list_catalog עם הקלט {}]");
+    // אין קבוצה שמורה בשיחה הזו, ולכן הכלי מחזיר מה חסר. מה שבודקים כאן הוא הצורה: טקסט ולא functionResponse.
+    expect(contents[2]!.parts![0]!.text).toMatch(/^\[תוצאת הכלי list_catalog: \{"ok":false,"missing":/);
+    const all = JSON.stringify(contents);
+    expect(all).not.toContain("functionCall");
+    expect(all).not.toContain("functionResponse");
+  });
+
+  it("מעבר מ-Groq ל-Gemini באמצע חישוב: Gemini ממשיך מהטקסט", async () => {
+    const ctx = makeCtx();
+    const q = fakeGroq([oReply(null, [{ name: "save_employee_profile", args: { group: "ג" } }]), oError(429)]);
+    const g = fakeGemini([gReply([gText("שמרתי את הקבוצה.")])]);
+
+    const r = await runTurn(ctx, "קבוצה ג", freeOptions([q.provider, g.provider]));
+    expect(r.via).toEqual(["Groq", "Gemini"]);
+    const last = g.requests[0].contents.at(-1);
+    expect(last.role).toBe("user");
+    expect(last.parts[0].text).toContain("[תוצאת הכלי save_employee_profile");
   });
 
   it("מפתח Gemini לא תקין: עובר ל-Groq ולא חוזר ל-Gemini חצי שעה", async () => {
@@ -345,12 +375,21 @@ describe("מעבר אוטומטי בין ספקים", () => {
     });
   });
 
-  it("תקלות שונות: ההודעה אומרת מה קרה לכל ספק", () => {
+  it("תקלות שונות: ההודעה אומרת מה קרה לכל ספק, עם הסיבה כשהבקשה נדחתה", () => {
     const err = new AllProvidersFailedError([
       { provider: "Gemini", kind: "rate", error: null },
       { provider: "Groq", kind: "auth", error: null },
     ]);
     expect(describeAgentError(err).message).toContain("Gemini הגיע למכסה, Groq המפתח לא תקין");
+
+    // כמו שגוגל החזירה בבדיקה אמיתית, כשהמודל הישן הוצא משימוש
+    const notFound = JSON.stringify({
+      error: { code: 404, message: "This model models/gemini-2.5-flash is no longer available to new users.", status: "NOT_FOUND" },
+    });
+    const rejected = new AllProvidersFailedError([{ provider: "Gemini", kind: "bad_request", error: gError(404, notFound) }]);
+    expect(describeAgentError(rejected).message).toContain(
+      "Gemini דחה את הבקשה (This model models/gemini-2.5-flash is no longer available to new users.)",
+    );
   });
 
   it("סינון אינטרנט (נטפרי, קוד 418): עובר לספק הבא ומסביר בעברית", async () => {
@@ -387,15 +426,30 @@ describe("בחירה לפי המפתחות", () => {
     expect(resolveMode({ GEMINI_API_KEY: "g", ANTHROPIC_API_KEY: "a", LLM_PROVIDER: "claude" })).toBe("claude");
   });
 
-  it("סדר הספקים: Gemini, Groq, OpenRouter, ו-LLM_PROVIDER מקדים אחד מהם", () => {
-    const all = { GEMINI_API_KEY: "g", GROQ_API_KEY: "q", OPENROUTER_API_KEY: "o" };
-    expect(createFreeProviders(all).map((p) => p.name)).toEqual(["gemini", "groq", "openrouter"]);
-    expect(createFreeProviders({ ...all, LLM_PROVIDER: "groq" }).map((p) => p.name)).toEqual(["groq", "gemini", "openrouter"]);
-    expect(createFreeProviders({ GROQ_API_KEY: "q", GROQ_MODEL: "llama-3.3-70b-versatile" })[0]!.model).toBe(
-      "llama-3.3-70b-versatile",
-    );
-    const opts = createAgentOptionsFromEnv(all);
-    expect(opts.mode).toBe("free");
+  it("סדר הספקים: Gemini, Cohere, Mistral, OpenRouter, Groq, ו-LLM_PROVIDER מקדים אחד מהם", () => {
+    const all = {
+      GEMINI_API_KEY: "g",
+      COHERE_API_KEY: "c",
+      MISTRAL_API_KEY: "m",
+      OPENROUTER_API_KEY: "o",
+      GROQ_API_KEY: "q",
+    };
+    expect(createFreeProviders(all).map((p) => p.name)).toEqual(["gemini", "cohere", "mistral", "openrouter", "groq"]);
+    expect(createFreeProviders({ ...all, LLM_PROVIDER: "mistral" }).map((p) => p.name)).toEqual([
+      "mistral", "gemini", "cohere", "openrouter", "groq",
+    ]);
+    const models = Object.fromEntries(createFreeProviders(all).map((p) => [p.name, p.model]));
+    expect(models).toEqual({
+      gemini: "gemini-3.8-flash",
+      cohere: "command-a-plus-05-2026",
+      mistral: "mistral-medium-latest",
+      openrouter: "google/gemma-4-31b-it:free",
+      groq: "openai/gpt-oss-120b",
+    });
+    expect(createFreeProviders({ OPENROUTER_API_KEY: "o", OPENROUTER_MODEL: "x:free, y:free" })[0]!.model).toBe("x:free");
+    expect(createAgentOptionsFromEnv(all).mode).toBe("free");
+    expect(resolveMode({ COHERE_API_KEY: "c" })).toBe("free");
+    expect(resolveMode({ MISTRAL_API_KEY: "m" })).toBe("free");
   });
 
   it("בלי מפתח: הודעה בעברית עם הדרך החינמית", () => {

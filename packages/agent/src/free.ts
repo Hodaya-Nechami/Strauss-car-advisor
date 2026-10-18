@@ -1,5 +1,5 @@
 /**
- * שרשרת הספקים החינמיים: Gemini, Groq ו-OpenRouter.
+ * שרשרת הספקים החינמיים: Gemini, Cohere, Mistral, OpenRouter ו-Groq.
  *
  * - ההיסטוריה נשמרת בפורמט שלנו (session.log), ומתורגמת לפורמט של כל ספק בכל בקשה.
  *   לכן אפשר לעבור ספק באמצע שיחה, ואפילו באמצע חישוב.
@@ -7,7 +7,7 @@
  *   כשזמן ההמתנה עובר, חוזרים אליו לפי הסדר.
  * - מפתח אחד לכל ספק. לא מחליפים בין כמה מפתחות של אותו ספק כדי לעקוף את המכסה שלו.
  */
-import { ApiError as GeminiApiError, FinishReason, GoogleGenAI, type Content, type Part } from "@google/genai";
+import { ApiError as GeminiApiError, FinishReason, GoogleGenAI, ThinkingLevel, type Content, type Part } from "@google/genai";
 import OpenAI from "openai";
 import { SYSTEM_PROMPT } from "./prompt";
 import { geminiFunctionDeclarations, openAITools } from "./schemas";
@@ -15,7 +15,7 @@ import type { LogEntry, LoggedCall, LoggedResult, RepAnswerRecord } from "./sess
 import type { ToolContext } from "./tools";
 import { TurnCollector, type TurnResult } from "./turn";
 
-export type FreeProviderName = "gemini" | "groq" | "openrouter";
+export type FreeProviderName = "gemini" | "cohere" | "mistral" | "openrouter" | "groq";
 
 /** תשובת מודל אחרי נרמול: אותה צורה מכל ספק */
 export interface ModelReply {
@@ -38,7 +38,8 @@ const REQUEST_TIMEOUT_MS = 60_000;
 /* ------------------------------ Gemini ------------------------------ */
 
 export type GeminiClient = Pick<GoogleGenAI, "models">;
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+/** gemini-2.5-flash כבר לא זמין למשתמשים חדשים (נבדק ב-18.10.2026). גוגל ממליצה על gemini-3.8-flash. */
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
 const GEMINI_BLOCKED = new Set<string>([
   FinishReason.SAFETY,
@@ -48,7 +49,11 @@ const GEMINI_BLOCKED = new Set<string>([
   FinishReason.SPII,
 ]);
 
-/** ההיסטוריה בפורמט של Gemini. תשובות ש-Gemini כתב נשלחות בדיוק כמו שהתקבלו. */
+/**
+ * ההיסטוריה בפורמט של Gemini.
+ * תשובות ש-Gemini כתב נשלחות בדיוק כמו שהתקבלו, כולל חתימות החשיבה.
+ * קריאות לכלים שספק אחר כתב נשלחות כטקסט רגיל, כי ל-Gemini 3 יש כללי חתימה לקריאות כלים, וקריאה זרה לא עומדת בהם.
+ */
 export function toGeminiContents(log: LogEntry[]): Content[] {
   const contents: Content[] = [];
   let lastModel: Extract<LogEntry, { role: "model" }> | undefined;
@@ -61,24 +66,46 @@ export function toGeminiContents(log: LogEntry[]): Content[] {
         role: "model",
         parts: entry.geminiParts ?? [
           ...(entry.text ? [{ text: entry.text }] : []),
-          ...entry.calls.map((c) => ({ functionCall: { name: c.name, args: c.args } })),
+          ...entry.calls.map((c) => ({ text: `[קריאה לכלי ${c.name} עם הקלט ${JSON.stringify(c.args)}]` })),
         ],
+      });
+    } else if (lastModel?.geminiParts) {
+      const model = lastModel;
+      contents.push({
+        role: "user",
+        parts: entry.results.map((r) => {
+          const original = model.calls.find((c) => c.id === r.id)?.providerId;
+          return { functionResponse: { ...(original ? { id: original } : {}), name: r.name, response: r.output } };
+        }),
       });
     } else {
       contents.push({
         role: "user",
-        parts: entry.results.map((r) => {
-          // מזהה מקורי רק לקריאה ש-Gemini עצמו כתב ונתן לה מזהה
-          const original = lastModel?.geminiParts ? lastModel.calls.find((c) => c.id === r.id)?.providerId : undefined;
-          return { functionResponse: { ...(original ? { id: original } : {}), name: r.name, response: r.output } };
-        }),
+        parts: entry.results.map((r) => ({ text: `[תוצאת הכלי ${r.name}: ${JSON.stringify(r.output)}]` })),
       });
     }
   }
   return contents;
 }
 
-export function geminiProvider(client: GeminiClient, model = DEFAULT_GEMINI_MODEL): FreeProvider {
+/**
+ * כמה Gemini "חושב" לפני תשובה. החישוב עצמו נעשה בקוד, ולכן מספיקה חשיבה נמוכה.
+ * בבדיקה אמיתית, תור עם שלושה כלים לקח כ-53 שניות בברירת המחדל של גוגל.
+ */
+export const DEFAULT_GEMINI_THINKING = ThinkingLevel.LOW;
+
+const THINKING_LEVELS: Record<string, ThinkingLevel> = {
+  minimal: ThinkingLevel.MINIMAL,
+  low: ThinkingLevel.LOW,
+  medium: ThinkingLevel.MEDIUM,
+  high: ThinkingLevel.HIGH,
+};
+
+export function geminiProvider(
+  client: GeminiClient,
+  model = DEFAULT_GEMINI_MODEL,
+  thinkingLevel: ThinkingLevel = DEFAULT_GEMINI_THINKING,
+): FreeProvider {
   return {
     name: "gemini",
     label: "Gemini",
@@ -87,7 +114,11 @@ export function geminiProvider(client: GeminiClient, model = DEFAULT_GEMINI_MODE
       const response = await client.models.generateContent({
         model,
         contents: toGeminiContents(log),
-        config: { systemInstruction: SYSTEM_PROMPT, tools: [{ functionDeclarations: geminiFunctionDeclarations }] },
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          tools: [{ functionDeclarations: geminiFunctionDeclarations }],
+          thinkingConfig: { thinkingLevel },
+        },
       });
       const candidate = response.candidates?.[0];
       const finish = candidate?.finishReason;
@@ -120,13 +151,22 @@ export function geminiProvider(client: GeminiClient, model = DEFAULT_GEMINI_MODE
   };
 }
 
-/* ----------------------- Groq ו-OpenRouter (פורמט OpenAI) ----------------------- */
+/* ------------------ Cohere, Mistral, OpenRouter ו-Groq (פורמט OpenAI) ------------------ */
 
 export type OpenAICompatClient = Pick<OpenAI, "chat">;
-export const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
+export const COHERE_BASE_URL = "https://api.cohere.ai/compatibility/v1";
+export const MISTRAL_BASE_URL = "https://api.mistral.ai/v1";
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+export const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
+export const DEFAULT_COHERE_MODEL = "command-a-plus-05-2026";
+export const DEFAULT_MISTRAL_MODEL = "mistral-medium-latest";
 export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
-export const DEFAULT_OPENROUTER_MODEL = "google/gemma-4-31b-it:free";
+/** מודלים חינמיים שתומכים בכלים. אם הראשון עמוס, OpenRouter עובר לבא בתור בעצמו. */
+export const DEFAULT_OPENROUTER_MODELS = [
+  "google/gemma-4-31b-it:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "google/gemma-4-26b-a4b-it:free",
+];
 
 /** ההיסטוריה בפורמט של OpenAI. בלי השדה name בהודעות, כי Groq דוחה אותו. */
 export function toOpenAIMessages(log: LogEntry[]): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
@@ -137,7 +177,8 @@ export function toOpenAIMessages(log: LogEntry[]): OpenAI.Chat.Completions.ChatC
     } else if (entry.role === "model") {
       messages.push({
         role: "assistant",
-        content: entry.text ?? null,
+        // עם קריאות לכלים ובלי טקסט שולחים מחרוזת ריקה, כי חלק מהספקים לא מקבלים null
+        content: entry.text ?? (entry.calls.length ? "" : null),
         ...(entry.calls.length
           ? {
               tool_calls: entry.calls.map((c) => ({
@@ -158,22 +199,26 @@ export function toOpenAIMessages(log: LogEntry[]): OpenAI.Chat.Completions.ChatC
 }
 
 export function openAICompatProvider(
-  name: "groq" | "openrouter",
+  name: Exclude<FreeProviderName, "gemini">,
   label: string,
   client: OpenAICompatClient,
   model: string,
+  /** מודלים חלופיים. ב-OpenRouter נשלחים בשדה models, והשרת שלו עובר ביניהם כשמודל עמוס. */
+  fallbackModels: string[] = [],
 ): FreeProvider {
   return {
     name,
     label,
     model,
     async generate(log, newCallId) {
-      const response = await client.chat.completions.create({
+      const body = {
         model,
         messages: toOpenAIMessages(log),
         tools: openAITools,
-        tool_choice: "auto",
-      });
+        tool_choice: "auto" as const,
+        ...(fallbackModels.length ? { models: [model, ...fallbackModels] } : {}),
+      };
+      const response = await client.chat.completions.create(body);
       const choice = response.choices[0];
       if (!choice) return { calls: [], finish: "stop" };
       if (choice.finish_reason === "content_filter") return { calls: [], finish: "blocked" };
@@ -288,6 +333,17 @@ export interface ProviderFailure {
   error: unknown;
 }
 
+/** ההסבר שהספק החזיר, בקצרה. בלי מפתחות: הספקים לא מחזירים אותם בהודעות. */
+export function providerErrorDetail(err: unknown): string {
+  const raw =
+    err instanceof GeminiApiError
+      ? (parseGeminiError(err.message).message ?? err.message)
+      : err instanceof Error
+        ? err.message
+        : String(err);
+  return raw.replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
 export class AllProvidersFailedError extends Error {
   constructor(readonly failures: ProviderFailure[]) {
     super(`All free providers failed: ${failures.map((f) => `${f.provider}=${f.kind}`).join(", ")}`);
@@ -332,7 +388,7 @@ async function callModel(
         }
         health.failed(provider.name, kind);
         failures.push({ provider: provider.label, kind, error: err });
-        console.warn(`[agent] ${provider.label} failed (${kind}); trying the next provider`);
+        console.warn(`[agent] ${provider.label} failed (${kind}): ${providerErrorDetail(err)}. Trying the next provider.`);
         break;
       }
     }
@@ -356,7 +412,8 @@ export async function continueFree(ctx: ToolContext, opts: FreeOptions): Promise
   const log = ctx.session.log;
   const turn = new TurnCollector(ctx);
   let seq = log.reduce((n, e) => n + (e.role === "model" ? e.calls.length : 0), 0);
-  const newCallId = () => `call_${++seq}`;
+  // 9 תווים, אותיות וספרות בלבד: הפורמט המחמיר ביותר מבין הספקים (Mistral)
+  const newCallId = () => `c${String(++seq).padStart(8, "0")}`;
 
   for (let round = 0; round <= maxToolRounds; round++) {
     const { reply, provider } = await callModel(opts, log, newCallId);
@@ -391,26 +448,41 @@ export async function continueFree(ctx: ToolContext, opts: FreeOptions): Promise
   return turn.finish("too_many_steps");
 }
 
-/** הספקים שיש להם מפתח, לפי הסדר: Gemini, Groq, OpenRouter. LLM_PROVIDER יכול להקדים אחד מהם. */
+const list = (value: string | undefined, fallback: string[]) => {
+  const items = (value ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+  return items.length ? items : fallback;
+};
+
+/**
+ * הספקים שיש להם מפתח, לפי הסדר: Gemini, Cohere, Mistral, OpenRouter, Groq.
+ * LLM_PROVIDER יכול להקדים אחד מהם.
+ */
 export function createFreeProviders(env: Record<string, string | undefined>): FreeProvider[] {
   const providers: FreeProvider[] = [];
+  const compat = (apiKey: string, baseURL: string, defaultHeaders?: Record<string, string>) =>
+    new OpenAI({ apiKey, baseURL, maxRetries: 0, timeout: REQUEST_TIMEOUT_MS, ...(defaultHeaders ? { defaultHeaders } : {}) });
+
   if (env.GEMINI_API_KEY) {
     const client = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY, httpOptions: { timeout: REQUEST_TIMEOUT_MS } });
-    providers.push(geminiProvider(client, env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL));
+    const thinking = THINKING_LEVELS[env.GEMINI_THINKING?.trim().toLowerCase() ?? ""] ?? DEFAULT_GEMINI_THINKING;
+    providers.push(geminiProvider(client, env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL, thinking));
   }
-  if (env.GROQ_API_KEY) {
-    const client = new OpenAI({ apiKey: env.GROQ_API_KEY, baseURL: GROQ_BASE_URL, maxRetries: 0, timeout: REQUEST_TIMEOUT_MS });
-    providers.push(openAICompatProvider("groq", "Groq", client, env.GROQ_MODEL || DEFAULT_GROQ_MODEL));
+  if (env.COHERE_API_KEY) {
+    const client = compat(env.COHERE_API_KEY, COHERE_BASE_URL);
+    providers.push(openAICompatProvider("cohere", "Cohere", client, env.COHERE_MODEL || DEFAULT_COHERE_MODEL));
+  }
+  if (env.MISTRAL_API_KEY) {
+    const client = compat(env.MISTRAL_API_KEY, MISTRAL_BASE_URL);
+    providers.push(openAICompatProvider("mistral", "Mistral", client, env.MISTRAL_MODEL || DEFAULT_MISTRAL_MODEL));
   }
   if (env.OPENROUTER_API_KEY) {
-    const client = new OpenAI({
-      apiKey: env.OPENROUTER_API_KEY,
-      baseURL: OPENROUTER_BASE_URL,
-      maxRetries: 0,
-      timeout: REQUEST_TIMEOUT_MS,
-      defaultHeaders: { "X-OpenRouter-Title": "Strauss Car Advisor" },
-    });
-    providers.push(openAICompatProvider("openrouter", "OpenRouter", client, env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL));
+    const [model, ...fallbacks] = list(env.OPENROUTER_MODEL, DEFAULT_OPENROUTER_MODELS);
+    const client = compat(env.OPENROUTER_API_KEY, OPENROUTER_BASE_URL, { "X-OpenRouter-Title": "Strauss Car Advisor" });
+    providers.push(openAICompatProvider("openrouter", "OpenRouter", client, model!, fallbacks));
+  }
+  if (env.GROQ_API_KEY) {
+    const client = compat(env.GROQ_API_KEY, GROQ_BASE_URL);
+    providers.push(openAICompatProvider("groq", "Groq", client, env.GROQ_MODEL || DEFAULT_GROQ_MODEL));
   }
   const first = env.LLM_PROVIDER?.trim().toLowerCase();
   return [...providers.filter((p) => p.name === first), ...providers.filter((p) => p.name !== first)];

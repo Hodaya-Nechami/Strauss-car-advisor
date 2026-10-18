@@ -31,9 +31,10 @@ function writeSessionId(id: string | null) {
   }
 }
 
-/** מציג **הדגשה** מהבוט כטקסט מודגש, בלי להריץ HTML */
+/** מציג **הדגשה** מהבוט כטקסט מודגש, ושורות שמתחילות ב-* או ב-- כנקודות. בלי להריץ HTML. */
 function renderText(text: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+  const bulleted = text.replace(/^(\s*)[*-]\s+/gm, "$1• ");
+  return bulleted.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
     part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : part,
   );
 }
