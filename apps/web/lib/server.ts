@@ -15,7 +15,7 @@ import {
   appendUserNote,
   createAgentOptionsFromEnv,
   describeAgentError,
-  resolveProvider,
+  resolveMode,
   newSession,
   resumeWithRepAnswer,
   runTool,
@@ -32,6 +32,8 @@ export interface TranscriptEntry {
   role: "employee" | "bot" | "notice" | "calc";
   text: string;
   comparisons?: ComparisonRecord[];
+  /** אילו מודלים ענו, למשל ["Gemini"] או ["Gemini", "Groq"] */
+  via?: string[];
   at: string;
 }
 
@@ -72,12 +74,17 @@ interface ServerState {
   agent?: AgentOptions;
 }
 
-/** מצב אחד לכל תהליך שרת. נשמר על globalThis כדי לשרוד טעינה מחדש של קוד בזמן פיתוח. */
+/**
+ * מצב אחד לכל תהליך שרת. נשמר על globalThis כדי לשרוד טעינה מחדש של קוד בזמן פיתוח.
+ * כשמבנה השיחות משתנה, מעלים את הגרסה במפתח: השרת מתחיל מזיכרון נקי במקום לקרוס על שיחות במבנה ישן.
+ */
+export const STATE_KEY = "__straussState_v3";
+
 function state(): ServerState {
-  const g = globalThis as unknown as { __straussState?: ServerState };
-  if (!g.__straussState) {
+  const g = globalThis as unknown as Record<string, ServerState | undefined>;
+  if (!g[STATE_KEY]) {
     const catalog = loadJson<CatalogCar[]>("catalog.json");
-    g.__straussState = {
+    g[STATE_KEY] = {
       rules: loadJson<Rules>("rules.json"),
       catalog,
       occupations: loadJson<Occupation[]>("occupations.json"),
@@ -86,7 +93,7 @@ function state(): ServerState {
       chats: new Map(),
     };
   }
-  return g.__straussState;
+  return g[STATE_KEY]!;
 }
 
 /** הגדרות הבוט: Gemini אם יש GEMINI_API_KEY, אחרת Claude. נבנות פעם אחת לכל תהליך. */
@@ -104,7 +111,7 @@ function agentOptions(s: ServerState): AgentOptions {
 
 /** הודעה בשם העובד שלא נכתבה בצ'אט, בהיסטוריה של המודל הנכון */
 function note(chat: StoredChat, text: string) {
-  appendUserNote(chat.session, text, resolveProvider(process.env) ?? "claude");
+  appendUserNote(chat.session, text, resolveMode(process.env) ?? "claude");
 }
 
 function context(s: ServerState, chat: StoredChat): ToolContext {
@@ -184,7 +191,7 @@ export async function sendMessage(sessionId: string | null, text: string): Promi
     chat.transcript.push({ role: "employee", text, at: now() });
     return runTurn(context(s, chat), text, options);
   });
-  chat.transcript.push({ role: "bot", text: result.reply, comparisons: result.comparisons, at: now() });
+  chat.transcript.push({ role: "bot", text: result.reply, comparisons: result.comparisons, via: result.via, at: now() });
   return view(chat);
 }
 
@@ -269,6 +276,6 @@ export async function answerRepQuestion(sessionId: string, ticketId: string, ans
     chat.transcript.push({ role: "notice", text: `הנציג ענה: ${answer}`, at: now() });
     return resumeWithRepAnswer(context(s, chat), ticketId, answer, options);
   });
-  chat.transcript.push({ role: "bot", text: result.reply, comparisons: result.comparisons, at: now() });
+  chat.transcript.push({ role: "bot", text: result.reply, comparisons: result.comparisons, via: result.via, at: now() });
   return view(chat);
 }

@@ -470,3 +470,10 @@ textarea {
     width: 100%;
   }
 }
+
+.via {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: -6px;
+  padding: 0 6px;
+}

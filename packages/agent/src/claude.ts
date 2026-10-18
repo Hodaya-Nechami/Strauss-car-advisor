@@ -27,7 +27,7 @@ const BETAS = ["server-side-fallback-2026-07-01", "thinking-binding-controls-202
 export type ClaudeClient = Pick<Anthropic, "beta">;
 
 export interface ClaudeOptions {
-  provider?: "claude";
+  mode?: "claude";
   client: ClaudeClient;
   model?: string;
   effort?: Effort;
@@ -69,6 +69,7 @@ export async function continueClaude(ctx: ToolContext, opts: ClaudeOptions): Pro
       console.warn("[agent] Claude dropped thinking blocks:", JSON.stringify(response.input_transformations));
     }
 
+    turn.answeredBy("Claude");
     // סירוב: לא מוסיפים את התשובה להיסטוריה ולא מריצים כלים
     if (response.stop_reason === "refusal") return turn.finish("refused");
 

@@ -1,8 +1,9 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { Content } from "@google/genai";
+import type { Part } from "@google/genai";
 import type { EmployeeProfile } from "@strauss/engine";
 
-export type Provider = "claude" | "gemini";
+/** claude: מודל אחד בתשלום. free: שרשרת של ספקים חינמיים שמחליפים זה את זה כשהמכסה נגמרת. */
+export type Mode = "claude" | "free";
 
 export interface RepQuestionRecord {
   ticketId: string;
@@ -15,26 +16,59 @@ export interface RepAnswerRecord extends RepQuestionRecord {
   answeredAt: string;
 }
 
+export interface LoggedCall {
+  /** מזהה פנימי, אחיד לכל הספקים */
+  id: string;
+  /** המזהה המקורי מ-Gemini, אם נתן כזה */
+  providerId?: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+export interface LoggedResult {
+  id: string;
+  name: string;
+  output: Record<string, unknown>;
+}
+
+/**
+ * היסטוריה בפורמט שלנו, שכל ספק חינמי מקבל מתורגמת לפורמט שלו.
+ * כך שיחה יכולה לעבור מ-Gemini ל-Groq באמצע, בלי לאבד כלום.
+ */
+export type LogEntry =
+  | { role: "user"; text: string }
+  | {
+      role: "model";
+      /** איזה ספק כתב את התשובה */
+      provider: string;
+      text?: string;
+      calls: LoggedCall[];
+      /** התשובה המקורית של Gemini, כולל חתימות החשיבה. נשלחת חזרה ל-Gemini בדיוק כמו שהתקבלה. */
+      geminiParts?: Part[];
+    }
+  | { role: "tools"; results: LoggedResult[] };
+
 /**
  * כל מה שנשמר על שיחה אחת. נשמר במסד הנתונים כמו שהוא (משימה N6).
- * ההיסטוריה נשמרת בפורמט של המודל שהשיחה התחילה איתו: messages ל-Claude, או geminiContents ל-Gemini.
- * בשתיהן מוסיפים בסוף בלבד, ואף פעם לא עורכים הודעה קודמת.
+ * בשתי ההיסטוריות מוסיפים בסוף בלבד, ואף פעם לא עורכים הודעה קודמת.
  */
 export interface SessionState {
   id: string;
-  /** המודל שהשיחה התחילה איתו. נקבע בתור הראשון ולא משתנה. */
-  provider?: Provider;
+  /** נקבע בתור הראשון ולא משתנה */
+  mode?: Mode;
   profile: Partial<EmployeeProfile>;
   /** שאלות שנשלחו לנציג ועוד לא נענו */
   pendingQuestions: RepQuestionRecord[];
   /** שאלות שהנציג כבר ענה עליהן */
   repAnswers: RepAnswerRecord[];
+  /** ההיסטוריה של Claude, בפורמט שלו */
   messages: Anthropic.Beta.BetaMessageParam[];
-  geminiContents: Content[];
+  /** ההיסטוריה של הספקים החינמיים, בפורמט שלנו */
+  log: LogEntry[];
 }
 
 export function newSession(id: string): SessionState {
-  return { id, profile: {}, pendingQuestions: [], repAnswers: [], messages: [], geminiContents: [] };
+  return { id, profile: {}, pendingQuestions: [], repAnswers: [], messages: [], log: [] };
 }
 
 /** שדות חובה לכל חישוב נטו, עם השם שלהם בעברית לשאלה לעובד */

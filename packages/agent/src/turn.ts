@@ -17,6 +17,8 @@ export interface TurnResult {
   repQuestions: RepQuestionRecord[];
   /** כל השאלות שעדיין מחכות לנציג */
   openQuestions: RepQuestionRecord[];
+  /** אילו ספקים ענו בתור הזה, לפי הסדר. למשל ["Gemini"] או ["Gemini", "Groq"] אם המכסה נגמרה באמצע. */
+  via: string[];
 }
 
 const REPLIES = {
@@ -30,8 +32,14 @@ export class TurnCollector {
   private texts: string[] = [];
   private comparisons: ComparisonRecord[] = [];
   private repQuestions: RepQuestionRecord[] = [];
+  private via: string[] = [];
 
   constructor(private readonly ctx: ToolContext) {}
+
+  /** רושם איזה ספק ענה. ספק שענה כמה פעמים ברצף נרשם פעם אחת. */
+  answeredBy(label: string) {
+    if (this.via.at(-1) !== label) this.via.push(label);
+  }
 
   addText(text: string) {
     const t = text.trim();
@@ -60,6 +68,7 @@ export class TurnCollector {
       comparisons: this.comparisons,
       repQuestions: this.repQuestions,
       openQuestions: [...this.ctx.session.pendingQuestions],
+      via: this.via,
     };
   }
 }

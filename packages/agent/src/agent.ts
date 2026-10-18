@@ -1,9 +1,11 @@
 /**
  * נקודת הכניסה של הבוט, בלי תלות במודל.
- * Gemini (חינם) או Claude (בתשלום) נבחרים לפי מפתח ה-API שהוגדר. אותם כלים ואותו מנוע בשניהם.
+ * free: שרשרת ספקים חינמיים (Gemini, Groq, OpenRouter) שמחליפים זה את זה כשהמכסה נגמרת.
+ * claude: Claude בתשלום. נבחר רק אם הוגדר לו מפתח ואין מפתחות חינמיים, או אם LLM_PROVIDER=claude.
+ * בכל המצבים: אותם כלים ואותו מנוע.
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { ApiError } from "@google/genai";
+import { ApiError as GeminiApiError } from "@google/genai";
 import {
   DEFAULT_EFFORT,
   EFFORTS,
@@ -13,12 +15,21 @@ import {
   type ClaudeOptions,
   type Effort,
 } from "./claude";
-import { appendGeminiRepAnswer, continueGemini, createGeminiClient, geminiUserContent, type GeminiOptions } from "./gemini";
-import type { Provider, SessionState } from "./session";
+import {
+  AllProvidersFailedError,
+  ProviderHealth,
+  appendFreeRepAnswer,
+  continueFree,
+  createFreeProviders,
+  parseGeminiError,
+  type FailureKind,
+  type FreeOptions,
+} from "./free";
+import type { Mode, SessionState } from "./session";
 import type { ToolContext } from "./tools";
 import type { TurnResult } from "./turn";
 
-export type AgentOptions = ClaudeOptions | GeminiOptions;
+export type AgentOptions = ClaudeOptions | FreeOptions;
 
 export class MissingApiKeyError extends Error {}
 
@@ -28,32 +39,32 @@ export class ProviderMismatchError extends Error {
   }
 }
 
-export function providerOf(opts: AgentOptions): Provider {
-  return opts.provider === "gemini" ? "gemini" : "claude";
+export function modeOf(opts: AgentOptions): Mode {
+  return opts.mode === "free" ? "free" : "claude";
 }
 
-function bindProvider(session: SessionState, provider: Provider) {
-  if (!session.provider) session.provider = provider;
-  else if (session.provider !== provider) throw new ProviderMismatchError();
+function bindMode(session: SessionState, mode: Mode) {
+  if (!session.mode) session.mode = mode;
+  else if (session.mode !== mode) throw new ProviderMismatchError();
 }
 
 /**
- * הודעה בשם העובד שלא נכתבה בצ'אט, למשל עדכון מטופס הנתונים.
- * נכנסת להיסטוריה של המודל שהשיחה התחילה איתו.
+ * הודעה בשם העובד, למשל מה שכתב בצ'אט או עדכון מטופס הנתונים.
+ * נכנסת להיסטוריה של המצב שהשיחה התחילה בו.
  */
-export function appendUserNote(session: SessionState, text: string, fallbackProvider: Provider) {
-  const provider = session.provider ?? fallbackProvider;
-  session.provider = provider;
-  if (provider === "gemini") session.geminiContents.push(geminiUserContent(text));
+export function appendUserNote(session: SessionState, text: string, fallbackMode: Mode) {
+  const mode = session.mode ?? fallbackMode;
+  session.mode = mode;
+  if (mode === "free") session.log.push({ role: "user", text });
   else session.messages.push({ role: "user", content: text });
 }
 
 /** הודעה חדשה מהעובד */
 export async function runTurn(ctx: ToolContext, userText: string, opts: AgentOptions): Promise<TurnResult> {
-  const provider = providerOf(opts);
-  bindProvider(ctx.session, provider);
-  appendUserNote(ctx.session, userText, provider);
-  return opts.provider === "gemini" ? continueGemini(ctx, opts) : continueClaude(ctx, opts);
+  const mode = modeOf(opts);
+  bindMode(ctx.session, mode);
+  appendUserNote(ctx.session, userText, mode);
+  return opts.mode === "free" ? continueFree(ctx, opts) : continueClaude(ctx, opts);
 }
 
 /**
@@ -68,90 +79,98 @@ export async function resumeWithRepAnswer(
 ): Promise<TurnResult> {
   const idx = ctx.session.pendingQuestions.findIndex((q) => q.ticketId === ticketId);
   if (idx === -1) throw new Error(`אין פנייה פתוחה בשם ${ticketId}`);
-  bindProvider(ctx.session, providerOf(opts));
+  bindMode(ctx.session, modeOf(opts));
   const [question] = ctx.session.pendingQuestions.splice(idx, 1);
   const record = { ...question!, answer, answeredAt: new Date().toISOString() };
   ctx.session.repAnswers.push(record);
 
-  if (opts.provider === "gemini") {
-    appendGeminiRepAnswer(ctx, record);
-    return continueGemini(ctx, opts);
+  if (opts.mode === "free") {
+    appendFreeRepAnswer(ctx, record);
+    return continueFree(ctx, opts);
   }
   appendClaudeRepAnswer(ctx, record);
   return continueClaude(ctx, opts);
 }
 
-/** איזה מודל להפעיל לפי הסביבה. LLM_PROVIDER קובע אם הוגדר. אחרת: Gemini אם יש לו מפתח, ואז Claude. */
-export function resolveProvider(env: Record<string, string | undefined>): Provider | null {
-  const wanted = env.LLM_PROVIDER?.trim().toLowerCase();
-  if (wanted === "gemini" || wanted === "claude") return wanted;
-  if (env.GEMINI_API_KEY) return "gemini";
+const FREE_KEYS = ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"] as const;
+
+/** באיזה מצב לעבוד לפי הסביבה. מפתחות חינמיים קודמים ל-Claude, אלא אם LLM_PROVIDER=claude. */
+export function resolveMode(env: Record<string, string | undefined>): Mode | null {
+  if (env.LLM_PROVIDER?.trim().toLowerCase() === "claude") return "claude";
+  if (FREE_KEYS.some((k) => env[k])) return "free";
   if (env.ANTHROPIC_API_KEY) return "claude";
   return null;
 }
 
 const NO_KEY_HELP =
   "חסר מפתח API. הדרך החינמית: מפתח של Gemini מהאתר aistudio.google.com, בלי כרטיס אשראי. " +
-  "כתבו אותו בקובץ apps/web/.env.local בשורה GEMINI_API_KEY=המפתח, והפעילו את השרת מחדש.";
+  "כתבו אותו בקובץ apps/web/.env בשורה GEMINI_API_KEY=המפתח, והפעילו את השרת מחדש. " +
+  "אפשר להוסיף גם GROQ_API_KEY ו-OPENROUTER_API_KEY, והבוט יעבור ביניהם לבד כשהמכסה נגמרת.";
 
-/** בונה את הגדרות הבוט מהסביבה, כולל הלקוח של המודל */
+/** בונה את הגדרות הבוט מהסביבה, כולל הלקוחות של המודלים */
 export function createAgentOptionsFromEnv(env: Record<string, string | undefined> = process.env): AgentOptions {
-  const provider = resolveProvider(env);
-  if (provider === "gemini") {
-    if (!env.GEMINI_API_KEY) throw new MissingApiKeyError("LLM_PROVIDER מוגדר ל-gemini, אבל חסר GEMINI_API_KEY. " + NO_KEY_HELP);
-    return { provider: "gemini", client: createGeminiClient(env.GEMINI_API_KEY), model: env.GEMINI_MODEL || undefined };
+  const mode = resolveMode(env);
+  if (mode === "free") {
+    return { mode: "free", providers: createFreeProviders(env), health: new ProviderHealth() };
   }
-  if (provider === "claude") {
+  if (mode === "claude") {
     if (!env.ANTHROPIC_API_KEY) {
-      throw new MissingApiKeyError("LLM_PROVIDER מוגדר ל-claude, אבל חסר ANTHROPIC_API_KEY בקובץ apps/web/.env.local.");
+      throw new MissingApiKeyError("LLM_PROVIDER מוגדר ל-claude, אבל חסר ANTHROPIC_API_KEY בקובץ apps/web/.env.");
     }
     const effort = EFFORTS.includes(env.CLAUDE_EFFORT as Effort) ? (env.CLAUDE_EFFORT as Effort) : DEFAULT_EFFORT;
-    return { provider: "claude", client: createClaudeClient(), model: env.CLAUDE_MODEL || undefined, effort };
+    return { mode: "claude", client: createClaudeClient(), model: env.CLAUDE_MODEL || undefined, effort };
   }
   throw new MissingApiKeyError(NO_KEY_HELP);
 }
 
-/** גוף השגיאה של Google מגיע כ-JSON בתוך ההודעה. מוציאים ממנו את ההסבר ואת קוד הסיבה. */
-function parseGeminiError(raw: string): { message?: string; reasons: string[] } {
-  try {
-    const body = JSON.parse(raw) as { error?: { message?: string; details?: { reason?: string }[] } };
-    return {
-      message: body.error?.message,
-      reasons: (body.error?.details ?? []).map((d) => d.reason).filter((r): r is string => typeof r === "string"),
-    };
-  } catch {
-    return { message: raw, reasons: [] };
-  }
-}
+const FAILURE_WORDS: Record<FailureKind, string> = {
+  rate: "הגיע למכסה",
+  server: "לא זמין כרגע",
+  auth: "המפתח לא תקין",
+  bad_request: "דחה את הבקשה",
+  filtered: "חסום על ידי סינון האינטרנט",
+};
 
 /** מתרגם שגיאה מהמודל להודעה בעברית ולקוד HTTP. מהספציפי לכללי. */
 export function describeAgentError(err: unknown): { status: number; message: string } {
   if (err instanceof MissingApiKeyError) return { status: 503, message: err.message };
   if (err instanceof ProviderMismatchError) return { status: 409, message: err.message };
 
-  // Gemini
-  if (err instanceof ApiError) {
-    const details = parseGeminiError(err.message);
-    if (details.reasons.includes("API_KEY_INVALID")) {
-      return { status: 401, message: "מפתח ה-API של Gemini לא תקין. בדקו את GEMINI_API_KEY בקובץ apps/web/.env.local." };
-    }
-    if (err.status === 429) {
+  // שרשרת הספקים החינמיים
+  if (err instanceof AllProvidersFailedError) {
+    if (err.failures.every((f) => f.kind === "rate")) {
+      const names = err.failures.map((f) => f.provider).join(", ");
       return {
         status: 429,
-        message: "עברנו את המכסה החינמית של Gemini. חכו דקה ונסו שוב. אם נגמרה המכסה היומית, היא מתחדשת מחר.",
+        message: `כל המפתחות החינמיים הגיעו למכסה כרגע (${names}). חכו דקה ונסו שוב. אם נגמרה המכסה היומית, היא מתחדשת מחר.`,
       };
     }
-    if (err.status === 401 || err.status === 403) {
-      return { status: 403, message: "אין הרשאה. בדקו את GEMINI_API_KEY בקובץ apps/web/.env.local." };
+    const details = err.failures.map((f) => `${f.provider} ${FAILURE_WORDS[f.kind]}`).join(", ");
+    const filterHint = err.failures.some((f) => f.kind === "filtered")
+      ? " ספק שחסום בסינון האינטרנט אפשר לבקש לפתוח אצל ספק הסינון, למשל נטפרי."
+      : "";
+    return {
+      status: 503,
+      message: `אף ספק לא הצליח לענות: ${details}. בדקו את המפתחות בקובץ apps/web/.env ונסו שוב.${filterHint}`,
+    };
+  }
+
+  // Gemini, כשהשגיאה לא עברה דרך השרשרת
+  if (err instanceof GeminiApiError) {
+    const details = parseGeminiError(err.message);
+    if (details.reasons.includes("API_KEY_INVALID")) {
+      return { status: 401, message: "מפתח ה-API של Gemini לא תקין. בדקו את GEMINI_API_KEY בקובץ apps/web/.env." };
+    }
+    if (err.status === 429) {
+      return { status: 429, message: "עברנו את המכסה החינמית של Gemini. חכו דקה ונסו שוב." };
     }
     if (err.status === 400) return { status: 400, message: `Gemini דחה את הבקשה: ${details.message ?? "סיבה לא ידועה"}` };
-    if (err.status >= 500) return { status: 503, message: "Gemini עמוס כרגע. נסו שוב בעוד רגע." };
     return { status: 502, message: `שגיאה מ-Gemini (קוד ${err.status}). נסו שוב.` };
   }
 
   // Claude
   if (err instanceof Anthropic.AuthenticationError) {
-    return { status: 401, message: "מפתח ה-API של Claude לא תקין. בדקו את ANTHROPIC_API_KEY בקובץ .env.local." };
+    return { status: 401, message: "מפתח ה-API של Claude לא תקין. בדקו את ANTHROPIC_API_KEY בקובץ apps/web/.env." };
   }
   if (err instanceof Anthropic.PermissionDeniedError) {
     return { status: 403, message: "למפתח ה-API אין הרשאה למודל הזה. בדקו את החשבון ב-Anthropic." };

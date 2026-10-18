@@ -18,7 +18,7 @@ const profile = {
 };
 
 function sessionMessages(id: string) {
-  return (globalThis as any).__straussState.chats.get(id).session.messages as { role: string; content: string }[];
+  return (globalThis as any)[server.STATE_KEY].chats.get(id).session.messages as { role: string; content: string }[];
 }
 
 describe("פעולות מסך בלי הבוט", () => {
@@ -76,9 +76,9 @@ describe("פעולות מסך בלי הבוט", () => {
 
   it("לא מוסיפים להיסטוריה בזמן שהבוט באמצע תור", async () => {
     const id = server.createChat().sessionId!;
-    (globalThis as any).__straussState.chats.get(id).busy = true;
+    (globalThis as any)[server.STATE_KEY].chats.get(id).busy = true;
     await expect(server.updateProfile(id, profile)).rejects.toMatchObject({ status: 409 });
-    (globalThis as any).__straussState.chats.get(id).busy = false;
+    (globalThis as any)[server.STATE_KEY].chats.get(id).busy = false;
   });
 
   it("שיחה שלא קיימת מחזירה 404", async () => {

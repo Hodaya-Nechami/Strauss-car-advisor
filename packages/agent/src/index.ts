@@ -5,6 +5,6 @@ export * from "./memory";
 export * from "./prompt";
 export * from "./turn";
 export * from "./claude";
-export * from "./gemini";
-export * from "./gemini-schema";
+export * from "./schemas";
+export * from "./free";
 export * from "./agent";

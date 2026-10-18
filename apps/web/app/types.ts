@@ -32,6 +32,7 @@ export interface TranscriptEntry {
   role: "employee" | "bot" | "notice" | "calc";
   text: string;
   comparisons?: ComparisonRecord[];
+  via?: string[];
   at: string;
 }
 

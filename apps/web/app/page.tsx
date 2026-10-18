@@ -183,6 +183,11 @@ export default function ChatPage() {
               return (
                 <div key={i} className="bot-block">
                   <div className="bubble bot">{renderText(entry.text)}</div>
+                  {entry.via && entry.via.length > 0 && (
+                    <div className="via">
+                      {entry.via.length === 1 ? "ענה" : "ענו"}: {entry.via.join(", ")}
+                    </div>
+                  )}
                   {cards(entry.comparisons)}
                 </div>
               );
