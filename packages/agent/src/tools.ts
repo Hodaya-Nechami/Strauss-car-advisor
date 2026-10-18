@@ -116,8 +116,15 @@ function display(b: NetBreakdown, rules: Rules) {
   };
 }
 
-function presentComparison(c: Comparison, rules: Rules): Result {
+/** מה המסך צריך כדי להציג תמונה של כל צד: סוג המצב ומזהה הרכב בקטלוג */
+function sideInfo(s: Situation) {
+  return { kind: s.kind, carId: s.kind === "car" ? s.car.catalogId : undefined };
+}
+
+function presentComparison(c: Comparison, rules: Rules, today: Situation, alternative: Situation): Result {
   return {
+    todaySide: sideInfo(today),
+    alternativeSide: sideInfo(alternative),
     eligibility: { status: c.eligibility.status, reason: c.eligibility.reason },
     today: c.today ? { label: c.today.label, ...display(c.today.breakdown, rules) } : null,
     alternative: c.alternative ? { label: c.alternative.label, ...display(c.alternative.breakdown, rules) } : null,
@@ -280,7 +287,46 @@ export const tools = {
       }
       const profile = completeProfile(ctx.session.profile)!;
       const c = compare({ profile, today, alternative, occupations: ctx.occupations, rules: ctx.rules });
-      return { ok: true, ...presentComparison(c, ctx.rules) };
+      return { ok: true, ...presentComparison(c, ctx.rules, today, alternative) };
+    },
+  }),
+
+  show_cars: def({
+    description:
+      "מציג לעובד במסך תמונות של רכבים מהקטלוג. מפעילים כשמציעים לעובד רכבים (עד 6), " +
+      "כשהעובד מספר איזה רכב יש לו היום, וכשהוא מתעניין ברכב מסוים. " +
+      "מקבל מזהי רכב (למשל CAR-10) או שמות דגם (למשל ATTO 3). לא מתארים את התמונות במילים: העובד רואה אותן.",
+    schema: z.object({
+      cars: z.array(z.string()).min(1).max(8).describe("מזהי רכבים או שמות דגם מהקטלוג"),
+      purpose: z
+        .enum(["options", "current", "interest"])
+        .describe("options: רכבים שאפשר לבחור · current: הרכב של העובד היום · interest: רכב שהעובד שוקל"),
+    }),
+    run: async (input, ctx) => {
+      const shown: Record<string, unknown>[] = [];
+      const notFound: string[] = [];
+      for (const name of input.cars) {
+        const car = findCatalogCar(ctx.catalog, name);
+        if (!car) notFound.push(name);
+        else if (!shown.some((c) => c.id === car.id)) {
+          shown.push({
+            id: car.id,
+            model: car.model,
+            manufacturer: car.manufacturer,
+            group: car.group,
+            drive: car.drive,
+            registrationYear: car.registrationYear,
+            valueOfUse: car.valueOfUse,
+          });
+        }
+      }
+      return {
+        ok: shown.length > 0,
+        purpose: input.purpose,
+        shown,
+        notFound,
+        ...(notFound.length ? { note: "לרכב שלא בקטלוג אין תמונה. אפשר לחפש אותו עם find_car_value_of_use." } : {}),
+      };
     },
   }),
 

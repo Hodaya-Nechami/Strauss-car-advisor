@@ -2,7 +2,10 @@
 
 /** כרטיס השוואה: היום מול החלופה. כל המספרים מגיעים ממנוע החישוב, לא מהבוט. */
 import { useState, type FormEvent } from "react";
-import type { ChatView, ComparisonView, SideView } from "./types";
+import { CarImage } from "./CarImage";
+import { shekel } from "./cars";
+import { Mascot } from "./Mascot";
+import type { ChatView, ComparisonView, SideInfo, SideView } from "./types";
 
 const BADGE: Record<ComparisonView["eligibility"]["status"], string> = {
   eligible: "זכאי/ת",
@@ -42,8 +45,6 @@ const DETAIL_ROWS: { key: string; label: string; total?: boolean }[] = [
   { key: "net", label: "נטו", total: true },
 ];
 
-const shekel = (n: number) => `${n.toLocaleString("en-US")} ₪`;
-
 function cell(side: SideView | null, key: keyof SideView) {
   if (!side) return "—";
   const v = side[key];
@@ -53,6 +54,24 @@ function cell(side: SideView | null, key: keyof SideView) {
 function detail(side: SideView | null, key: string) {
   const v = side?.breakdown?.[key];
   return typeof v === "number" ? shekel(v) : "—";
+}
+
+/** שם לתצוגה כשהחלופה לא חושבה (למשל לא זכאי): מתוך מה שהבוט ביקש לבדוק */
+function requestedLabel(input: unknown): string | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const s = input as { kind?: string; car?: string; outsideCatalog?: { label?: string } };
+  if (s.kind === "waiver") return "ויתור על הרכב";
+  return s.car ?? s.outsideCatalog?.label;
+}
+
+function SideTile({ title, side, label }: { title: string; side?: SideInfo; label: string }) {
+  return (
+    <div className="side-tile">
+      <div className="side-title">{title}</div>
+      <CarImage carId={side?.carId} label={label} kind={side?.kind ?? "car"} credit={false} />
+      <div className="side-label">{label}</div>
+    </div>
+  );
 }
 
 interface Options {
@@ -112,7 +131,7 @@ function Recalculate({ sessionId, today, onView }: { sessionId: string; today: u
         if ((e.currentTarget as HTMLDetailsElement).open) void loadOptions();
       }}
     >
-      <summary>לבדוק רכב אחר</summary>
+      <summary>🔁 לבדוק רכב אחר</summary>
       {!options && !error && <div className="muted">טוען...</div>}
       {options && (
         <form onSubmit={submit} className="inline-form">
@@ -156,12 +175,12 @@ function Recalculate({ sessionId, today, onView }: { sessionId: string; today: u
 
 export function ComparisonCard({
   data,
-  today,
+  input,
   sessionId,
   onView,
 }: {
   data: ComparisonView;
-  today?: unknown;
+  input?: { today?: unknown; alternative?: unknown };
   sessionId?: string | null;
   onView?: (v: ChatView) => void;
 }) {
@@ -170,26 +189,39 @@ export function ComparisonCard({
   const details = DETAIL_ROWS.filter(
     (r) => r.total || (t?.breakdown?.[r.key] ?? 0) !== 0 || (a?.breakdown?.[r.key] ?? 0) !== 0,
   );
+  const todayLabel = t?.label ?? requestedLabel(input?.today) ?? "המצב היום";
+  const altLabel = a?.label ?? requestedLabel(input?.alternative) ?? "החלופה";
+  const mood = diffNet === null ? "idle" : diffNet > 0 ? "happy" : diffNet < 0 ? "sad" : "idle";
 
   return (
-    <section className="card" aria-label="השוואת נטו">
+    <section className="card comparison" aria-label="השוואת נטו">
       <div className="card-head">
-        <div>
-          <div className="card-title">השוואה: היום מול החלופה</div>
-          <div className="card-sub">
-            {t?.label ?? "המצב היום"} · {a?.label ?? "החלופה"}
-          </div>
-        </div>
+        <div className="card-title">השוואה: היום מול החלופה</div>
         <span className={`badge ${eligibility.status}`}>{BADGE[eligibility.status]}</span>
       </div>
 
+      <div className="sides">
+        <SideTile title="היום" side={data.todaySide} label={todayLabel} />
+        <div className="sides-arrow" aria-hidden="true">
+          ←
+        </div>
+        <SideTile title="החלופה" side={data.alternativeSide} label={altLabel} />
+      </div>
+
       {diffNet !== null && (
-        <div className={`diff ${diffNet >= 0 ? "up" : "down"}`}>
-          <bdi>
-            {diffNet > 0 ? "+" : diffNet < 0 ? "−" : ""}
-            {shekel(Math.abs(diffNet))}
-          </bdi>{" "}
-          <small>בחודש בנטו</small>
+        <div className={`diff-banner ${diffNet > 0 ? "up" : diffNet < 0 ? "down" : "same"}`}>
+          <Mascot mood={mood} size={58} />
+          <div>
+            <div className="diff-amount">
+              <bdi>
+                {diffNet > 0 ? "+" : diffNet < 0 ? "−" : ""}
+                {shekel(Math.abs(diffNet))}
+              </bdi>
+            </div>
+            <div className="diff-caption">
+              {diffNet > 0 ? "יותר בנטו, בכל חודש" : diffNet < 0 ? "פחות בנטו, בכל חודש" : "אותו נטו בדיוק"}
+            </div>
+          </div>
         </div>
       )}
 
@@ -229,7 +261,7 @@ export function ComparisonCard({
 
       {(t || a) && (
         <details className="more">
-          <summary>איך חושב?</summary>
+          <summary>🧮 איך חושב?</summary>
           <div className="table-wrap">
             <table className="compare details">
               <thead>
@@ -261,8 +293,8 @@ export function ComparisonCard({
         </details>
       )}
 
-      {sessionId && today !== undefined && onView && (
-        <Recalculate sessionId={sessionId} today={today} onView={onView} />
+      {sessionId && input?.today !== undefined && onView && (
+        <Recalculate sessionId={sessionId} today={input.today} onView={onView} />
       )}
     </section>
   );

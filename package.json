@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit -p packages/engine && tsc --noEmit -p packages/agent",
     "config:build": "python scripts/excel-to-json.py .",
     "dev": "npm run dev -w apps/web",
-    "build": "npm run build -w apps/web"
+    "build": "npm run build -w apps/web",
+    "cars:images": "node scripts/fetch-car-images.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

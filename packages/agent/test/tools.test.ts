@@ -82,6 +82,35 @@ describe("דרך הכלים מקבלים בדיוק את הנטו של המאר�
     expect(r.today.net).toBe(11032);
     expect(r.alternative.net).toBe(11693);
     expect(r.diffNet).toBe(661);
+    // בשביל התמונות במסך
+    expect(r.todaySide).toEqual({ kind: "car", carId: "CAR-09" });
+    expect(r.alternativeSide).toEqual({ kind: "car", carId: "CAR-10" });
+  });
+});
+
+describe("הצגת רכבים בתמונות", () => {
+  it("מחזיר את הרכבים שביקשו, לפי מזהה או שם דגם, בלי כפילויות", async () => {
+    const { call } = makeCtx();
+    const r = await call("show_cars", { cars: ["CAR-10", "ev3", "ATTO 3"], purpose: "options" });
+    expect(r.ok).toBe(true);
+    expect(r.purpose).toBe("options");
+    expect(r.shown.map((c: { id: string }) => c.id)).toEqual(["CAR-10", "CAR-11"]);
+    expect(r.shown[1]).toMatchObject({ model: "EV3", group: "ג", drive: "חשמלי", valueOfUse: 2930 });
+    expect(r.notFound).toEqual([]);
+  });
+
+  it("רכב שלא בקטלוג: מדווח עליו ולא ממציא תמונה", async () => {
+    const { call } = makeCtx();
+    const r = await call("show_cars", { cars: ["CYBERTRUCK"], purpose: "interest" });
+    expect(r.ok).toBe(false);
+    expect(r.notFound).toEqual(["CYBERTRUCK"]);
+    expect(r.note).toContain("find_car_value_of_use");
+  });
+
+  it("מטרה לא מוכרת נדחית", async () => {
+    const { call } = makeCtx();
+    const r = await call("show_cars", { cars: ["EV3"], purpose: "random" });
+    expect(r.error).toBe("קלט לא תקין");
   });
 });
 

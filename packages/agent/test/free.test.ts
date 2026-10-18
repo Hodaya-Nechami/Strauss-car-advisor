@@ -193,6 +193,23 @@ describe("Gemini לבד", () => {
     expect((r.comparisons[0]!.result as any).diffNet).toBe(661);
   });
 
+  it("רכבים שהבוט הציג בתמונות חוזרים למסך עם התשובה", async () => {
+    const ctx = makeCtx();
+    const g = fakeGemini([
+      gReply([
+        gCall("g1", "show_cars", { cars: ["COROLLA CROSS"], purpose: "current" }),
+        gCall("g2", "show_cars", { cars: ["ATTO 3", "EV3"], purpose: "options" }),
+      ]),
+      gReply([gText("הנה הרכבים שאפשר לבחור.")]),
+    ]);
+
+    const r = await runTurn(ctx, "יש לי קורולה קרוס", freeOptions([g.provider]));
+    expect(r.carGroups.map((x) => [x.purpose, x.cars.map((c) => c.id)])).toEqual([
+      ["current", ["CAR-09"]],
+      ["options", ["CAR-10", "CAR-11"]],
+    ]);
+  });
+
   it("תשובת נציג נקראת מהכלי get_rep_answers", async () => {
     const ctx = makeCtx();
     const g = fakeGemini([

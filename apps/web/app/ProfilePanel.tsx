@@ -78,7 +78,7 @@ export function ProfilePanel({
   return (
     <details className="profile">
       <summary>
-        הנתונים שלי <span className="muted">({filled} שדות)</span>
+        📋 הנתונים שלי <span className="muted">({filled} שדות)</span>
       </summary>
       <form onSubmit={submit} className="profile-form">
         <label>

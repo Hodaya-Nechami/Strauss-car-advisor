@@ -1,0 +1,192 @@
+{
+  "CAR-01": {
+    "src": "/cars/CAR-01.jpg",
+    "width": 960,
+    "height": 569,
+    "wikiTitle": "Kia Picanto",
+    "author": "Vauxford",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:2018_Kia_Picanto_3_Automatic_1.2_Front.jpg"
+  },
+  "CAR-02": {
+    "src": "/cars/CAR-02.jpg",
+    "width": 960,
+    "height": 552,
+    "wikiTitle": "Toyota Yaris Cross",
+    "author": "Alexander-93",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Toyota_Yaris_Cross_Hybrid_(XP210)_1X7A1846.jpg"
+  },
+  "CAR-03": {
+    "src": "/cars/CAR-03.jpg",
+    "width": 960,
+    "height": 640,
+    "wikiTitle": "BYD Dolphin",
+    "author": "User3204",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:2021_BYD_Dolphin_EV_(front).jpg"
+  },
+  "CAR-04": {
+    "src": "/cars/CAR-04.jpg",
+    "width": 960,
+    "height": 470,
+    "wikiTitle": "SEAT León",
+    "author": "Vauxford",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:2020_SEAT_Leon_FR_TSi_Evo_1.5_Front.jpg"
+  },
+  "CAR-05": {
+    "src": "/cars/CAR-05.jpg",
+    "width": 960,
+    "height": 569,
+    "wikiTitle": "Kia Niro",
+    "author": "Alexander Migl",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Kia_Niro_(SG2)_PHEV_Leonberg_2022_1X7A0474.jpg"
+  },
+  "CAR-06": {
+    "src": "/cars/CAR-06.jpg",
+    "width": 960,
+    "height": 492,
+    "wikiTitle": "MG4 EV",
+    "author": "© M 93",
+    "license": "CC BY-SA 3.0 de",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/de/deed.en",
+    "source": "https://commons.wikimedia.org/wiki/File:MG4_Electric_%E2%80%93_f_21042025.jpg"
+  },
+  "CAR-07": {
+    "src": "/cars/CAR-07.jpg",
+    "width": 960,
+    "height": 473,
+    "wikiTitle": "Toyota Corolla (E210)",
+    "author": "EurovisionNim",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:2018_Toyota_Corolla_(MZEA12R)_Ascent_Sport_hatchback_(2018-11-02)_01.jpg"
+  },
+  "CAR-08": {
+    "src": "/cars/CAR-08.jpg",
+    "width": 960,
+    "height": 541,
+    "wikiTitle": "Hyundai Kona",
+    "author": "Alexander Migl",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Hyundai_Kona_N_Line_(SX2)_DSC_8250.jpg"
+  },
+  "CAR-09": {
+    "src": "/cars/CAR-09.jpg",
+    "width": 960,
+    "height": 600,
+    "wikiTitle": "Toyota Corolla Cross",
+    "author": "Mr.choppers",
+    "license": "CC BY-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0",
+    "source": "https://commons.wikimedia.org/wiki/File:2023_Toyota_Corolla_Cross_XLE_4WD_in_Wind_Chill_Pearl,_front_left.jpg"
+  },
+  "CAR-10": {
+    "src": "/cars/CAR-10.jpg",
+    "width": 960,
+    "height": 521,
+    "wikiTitle": "BYD Atto 3",
+    "author": "Alexander Migl",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:BYD_Atto_3_1X7A6491.jpg"
+  },
+  "CAR-11": {
+    "src": "/cars/CAR-11.jpg",
+    "width": 960,
+    "height": 562,
+    "wikiTitle": "Kia EV3",
+    "author": "Alexander Migl",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Kia_EV3_GT-Line_Automesse_Ludwigsburg_2025_DSC_2635_(cropped).jpg"
+  },
+  "CAR-12": {
+    "src": "/cars/CAR-12.jpg",
+    "width": 960,
+    "height": 515,
+    "wikiTitle": "Hyundai Tucson",
+    "author": "© M 93",
+    "license": "CC BY-SA 3.0 de",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/de/deed.en",
+    "source": "https://commons.wikimedia.org/wiki/File:Hyundai_Tucson_1.6_T-GDI_PHEV_Prime_(IV)_%E2%80%93_f_05072025.jpg"
+  },
+  "CAR-13": {
+    "src": "/cars/CAR-13.jpg",
+    "width": 960,
+    "height": 503,
+    "wikiTitle": "Mazda3",
+    "author": "TTTNIS",
+    "license": "CC0",
+    "licenseUrl": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "source": "https://commons.wikimedia.org/wiki/File:Mazda3_SKYACTIV-G.jpg"
+  },
+  "CAR-14": {
+    "src": "/cars/CAR-14.jpg",
+    "width": 960,
+    "height": 639,
+    "wikiTitle": "Tesla Model 3",
+    "author": "Alexander-93",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Tesla_Model_3_(2023)_Autofr%C3%BChling_Ulm_IMG_9282.jpg"
+  },
+  "CAR-15": {
+    "src": "/cars/CAR-15.jpg",
+    "width": 960,
+    "height": 508,
+    "wikiTitle": "Škoda Octavia",
+    "author": "Mike-fiesta",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Skoda_Octavia_IV_liftback_(cropped).jpg"
+  },
+  "CAR-16": {
+    "src": "/cars/CAR-16.jpg",
+    "width": 960,
+    "height": 503,
+    "wikiTitle": "Kia Sportage",
+    "author": "LuvsMG481",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:2025_Kia_Sportage_S_front_only.jpg"
+  },
+  "CAR-17": {
+    "src": "/cars/CAR-17.jpg",
+    "width": 960,
+    "height": 546,
+    "wikiTitle": "BYD Seal",
+    "author": "User3204",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:2022_BYD_Seal.jpg"
+  },
+  "CAR-18": {
+    "src": "/cars/CAR-18.jpg",
+    "width": 960,
+    "height": 575,
+    "wikiTitle": "Toyota RAV4",
+    "author": "Mr.choppers",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:2024_Toyota_RAV4_Prime_XSE_Premium_in_Silver_Sky_with_Midnight_Black_roof,_front_left.jpg"
+  },
+  "CAR-20": {
+    "src": "/cars/CAR-20.jpg",
+    "width": 960,
+    "height": 586,
+    "wikiTitle": "Hyundai Santa Fe",
+    "author": "Elise240SX",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:2024_Hyundai_Santa_Fe_Luxury_AWD_in_Hampton_Grey,_front_left,_2024-06-30.jpg"
+  }
+}

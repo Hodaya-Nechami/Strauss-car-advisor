@@ -1,4 +1,4 @@
-/** הטיפוסים שהמסך מקבל מהשרת. תואמים לתוצאת calculate_comparison ול-ChatView שב-lib/server.ts. */
+/** הטיפוסים שהמסך מקבל מהשרת. תואמים לתוצאות הכלים ול-ChatView שב-lib/server.ts. */
 
 export interface SideView {
   label: string;
@@ -13,7 +13,15 @@ export interface SideView {
   breakdown: Record<string, number>;
 }
 
+/** סוג המצב בכל צד, ומזהה הרכב בקטלוג אם יש. בשביל התמונות. */
+export interface SideInfo {
+  kind: "car" | "waiver" | "none";
+  carId?: string;
+}
+
 export interface ComparisonView {
+  todaySide?: SideInfo;
+  alternativeSide?: SideInfo;
   eligibility: { status: "eligible" | "not_eligible" | "needs_info"; reason: string };
   today: SideView | null;
   alternative: SideView | null;
@@ -28,10 +36,27 @@ export interface ComparisonRecord {
   result: ComparisonView;
 }
 
+/** רכב מהקטלוג, כמו שהכלי show_cars מחזיר */
+export interface CarSummary {
+  id: string;
+  model: string;
+  manufacturer: string;
+  group: string;
+  drive: string;
+  registrationYear: number;
+  valueOfUse: number;
+}
+
+export interface CarGroup {
+  purpose: "options" | "current" | "interest";
+  cars: CarSummary[];
+}
+
 export interface TranscriptEntry {
   role: "employee" | "bot" | "notice" | "calc";
   text: string;
   comparisons?: ComparisonRecord[];
+  cars?: CarGroup[];
   via?: string[];
   at: string;
 }

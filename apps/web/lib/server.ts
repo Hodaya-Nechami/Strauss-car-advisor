@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { CatalogCar, EmployeeProfile, Occupation, Rules } from "@strauss/engine";
 import {
+  type CarGroup,
   CatalogDataSource,
   MemoryRepQueue,
   appendUserNote,
@@ -32,6 +33,8 @@ export interface TranscriptEntry {
   role: "employee" | "bot" | "notice" | "calc";
   text: string;
   comparisons?: ComparisonRecord[];
+  /** רכבים להצגה בתמונות */
+  cars?: CarGroup[];
   /** אילו מודלים ענו, למשל ["Gemini"] או ["Gemini", "Groq"] */
   via?: string[];
   at: string;
@@ -191,7 +194,7 @@ export async function sendMessage(sessionId: string | null, text: string): Promi
     chat.transcript.push({ role: "employee", text, at: now() });
     return runTurn(context(s, chat), text, options);
   });
-  chat.transcript.push({ role: "bot", text: result.reply, comparisons: result.comparisons, via: result.via, at: now() });
+  chat.transcript.push({ role: "bot", text: result.reply, comparisons: result.comparisons, cars: result.carGroups, via: result.via, at: now() });
   return view(chat);
 }
 
@@ -276,6 +279,6 @@ export async function answerRepQuestion(sessionId: string, ticketId: string, ans
     chat.transcript.push({ role: "notice", text: `הנציג ענה: ${answer}`, at: now() });
     return resumeWithRepAnswer(context(s, chat), ticketId, answer, options);
   });
-  chat.transcript.push({ role: "bot", text: result.reply, comparisons: result.comparisons, via: result.via, at: now() });
+  chat.transcript.push({ role: "bot", text: result.reply, comparisons: result.comparisons, cars: result.carGroups, via: result.via, at: now() });
   return view(chat);
 }

@@ -45,6 +45,18 @@ describe("כרטיס ההשוואה מציג בדיוק את מספרי המנו
     expect(text).not.toContain("אחזקת רכב");
   });
 
+  it("מציג תמונות של שני הרכבים, ונטו שמח כשהנטו עולה", async () => {
+    const data = await compareVia(
+      { group: "ג", occupation: "מנהל/ת מוצר", baseSalary: 18500, commissions: 0, bonus: 0, pensionRate: 6, studyFundRate: 2.5, creditPoints: 2.75 },
+      { kind: "car", car: "COROLLA CROSS", participation: 300 },
+      { kind: "car", car: "ATTO 3", participation: 300 },
+    );
+    const html = renderToStaticMarkup(<ComparisonCard data={data} />);
+    expect(html).toContain('src="/cars/CAR-09.jpg"');
+    expect(html).toContain('src="/cars/CAR-10.jpg"');
+    expect(html).toContain("mascot-happy");
+  });
+
   it("חלופה לא זכאית: מציג את הסיבה ואת המצב היום בלבד", async () => {
     const data = await compareVia(
       { group: "ג", occupation: "מנהל/ת מוצר", baseSalary: 18500, commissions: 0, bonus: 0, pensionRate: 6, studyFundRate: 2.5, creditPoints: 2.75 },

@@ -8,11 +8,19 @@ export interface ComparisonRecord {
   result: Record<string, unknown>;
 }
 
+/** רכבים שהבוט ביקש להציג בתמונות בתור הזה */
+export interface CarGroup {
+  purpose: "options" | "current" | "interest";
+  cars: Record<string, unknown>[];
+}
+
 export interface TurnResult {
   /** מה שמציגים לעובד */
   reply: string;
   status: "done" | "refused" | "truncated" | "too_many_steps";
   comparisons: ComparisonRecord[];
+  /** רכבים להצגה בתמונות */
+  carGroups: CarGroup[];
   /** שאלות שנשלחו לנציג בתור הזה */
   repQuestions: RepQuestionRecord[];
   /** כל השאלות שעדיין מחכות לנציג */
@@ -31,6 +39,7 @@ const REPLIES = {
 export class TurnCollector {
   private texts: string[] = [];
   private comparisons: ComparisonRecord[] = [];
+  private carGroups: CarGroup[] = [];
   private repQuestions: RepQuestionRecord[] = [];
   private via: string[] = [];
 
@@ -52,6 +61,9 @@ export class TurnCollector {
     if (name === "calculate_comparison" && output.ok === true) {
       this.comparisons.push({ input, result: output });
     }
+    if (name === "show_cars" && output.ok === true) {
+      this.carGroups.push({ purpose: output.purpose as CarGroup["purpose"], cars: output.shown as Record<string, unknown>[] });
+    }
     if (name === "ask_representative" && output.ok === true) {
       const asked = this.ctx.session.pendingQuestions.find((q) => q.ticketId === output.ticketId);
       if (asked) this.repQuestions.push(asked);
@@ -66,6 +78,7 @@ export class TurnCollector {
       reply,
       status,
       comparisons: this.comparisons,
+      carGroups: this.carGroups,
       repQuestions: this.repQuestions,
       openQuestions: [...this.ctx.session.pendingQuestions],
       via: this.via,
