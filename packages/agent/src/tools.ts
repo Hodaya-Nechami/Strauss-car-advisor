@@ -111,6 +111,8 @@ function display(b: NetBreakdown, rules: Rules) {
     maintenance: r(b.maintenance),
     electricRefundNet: b.electricGross > 0 ? rules.electric.netBonus : 0,
     familyGapEmployee: r(b.familyGapEmployee),
+    /** כל שלבי החישוב, מעוגלים, בשביל "איך חושב?" במסך */
+    breakdown: Object.fromEntries(Object.entries(b).map(([k, v]) => [k, r(v)])) as Record<keyof NetBreakdown, number>,
   };
 }
 

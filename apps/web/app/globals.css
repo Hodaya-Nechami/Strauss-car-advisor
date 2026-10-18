@@ -372,3 +372,101 @@ textarea {
     font-size: 1.15rem;
   }
 }
+
+/* פירוט, בדיקת חלופה וטופס נתונים */
+.muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.more {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.more summary,
+.profile summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.compare.details tr.total td {
+  font-weight: 700;
+}
+
+.inline-form,
+.profile-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+  margin-top: 10px;
+}
+
+.inline-form label,
+.profile-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.inline-form select,
+.inline-form input,
+.profile-form select,
+.profile-form input {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  min-width: 160px;
+  max-width: 100%;
+}
+
+.small-button {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 10px;
+  padding: 9px 18px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.small-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.profile {
+  margin-top: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+
+.profile .error,
+.more .error {
+  width: 100%;
+  margin-top: 8px;
+}
+
+@media (max-width: 560px) {
+  .inline-form select,
+  .inline-form input,
+  .profile-form select,
+  .profile-form input {
+    min-width: 0;
+    width: 100%;
+  }
+  .inline-form label,
+  .profile-form label {
+    width: 100%;
+  }
+}

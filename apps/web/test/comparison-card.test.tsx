@@ -5,7 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { CatalogCar, Occupation, Rules } from "@strauss/engine";
 import { CatalogDataSource, MemoryRepQueue, newSession, runTool, type ToolContext } from "@strauss/agent";
-import { ComparisonCard, type ComparisonView } from "../app/ComparisonCard";
+import { ComparisonCard } from "../app/ComparisonCard";
+import type { ComparisonView } from "../app/types";
 
 const configDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "config");
 const load = <T,>(n: string): T => JSON.parse(readFileSync(join(configDir, n), "utf-8")) as T;

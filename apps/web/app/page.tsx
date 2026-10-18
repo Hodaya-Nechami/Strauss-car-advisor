@@ -1,20 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ComparisonCard, type ComparisonView } from "./ComparisonCard";
-
-interface TranscriptEntry {
-  role: "employee" | "bot" | "notice";
-  text: string;
-  comparisons?: { input: unknown; result: ComparisonView }[];
-  at: string;
-}
-
-interface ChatView {
-  sessionId: string | null;
-  transcript: TranscriptEntry[];
-  openQuestions: { ticketId: string; about: string; question: string }[];
-}
+import { ComparisonCard } from "./ComparisonCard";
+import { ProfilePanel } from "./ProfilePanel";
+import type { ChatView, ComparisonRecord, Profile, TranscriptEntry } from "./types";
 
 const SESSION_KEY = "strauss-car-advisor-session";
 const POLL_MS = 4000;
@@ -53,6 +42,7 @@ export default function ChatPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [openQuestions, setOpenQuestions] = useState<ChatView["openQuestions"]>([]);
+  const [profile, setProfile] = useState<Profile>({});
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +52,7 @@ export default function ChatPage() {
     setSessionId(v.sessionId);
     setTranscript(v.transcript);
     setOpenQuestions(v.openQuestions);
+    setProfile(v.profile ?? {});
     writeSessionId(v.sessionId);
   }, []);
 
@@ -122,8 +113,14 @@ export default function ChatPage() {
     setSessionId(null);
     setTranscript([]);
     setOpenQuestions([]);
+    setProfile({});
     setError(null);
   }
+
+  const cards = (records: ComparisonRecord[] | undefined) =>
+    records?.map((c, j) => (
+      <ComparisonCard key={j} data={c.result} today={c.input?.today} sessionId={sessionId} onView={applyView} />
+    ));
 
   return (
     <main className="page">
@@ -138,6 +135,10 @@ export default function ChatPage() {
           </button>
         )}
       </header>
+
+      {sessionId && Object.keys(profile).length > 0 && (
+        <ProfilePanel sessionId={sessionId} profile={profile} onView={applyView} />
+      )}
 
       <div className="messages" aria-live="polite">
         {transcript.length === 0 && (
@@ -158,26 +159,34 @@ export default function ChatPage() {
         )}
 
         {transcript.map((entry, i) => {
-          if (entry.role === "employee") {
-            return (
-              <div key={i} className="bubble employee">
-                {entry.text}
-              </div>
-            );
+          switch (entry.role) {
+            case "employee":
+              return (
+                <div key={i} className="bubble employee">
+                  {entry.text}
+                </div>
+              );
+            case "notice":
+              return (
+                <div key={i} className="notice">
+                  {entry.text}
+                </div>
+              );
+            case "calc":
+              return (
+                <div key={i} className="bot-block">
+                  <div className="notice">{entry.text}</div>
+                  {cards(entry.comparisons)}
+                </div>
+              );
+            default:
+              return (
+                <div key={i} className="bot-block">
+                  <div className="bubble bot">{renderText(entry.text)}</div>
+                  {cards(entry.comparisons)}
+                </div>
+              );
           }
-          if (entry.role === "notice") {
-            return (
-              <div key={i} className="notice">
-                {entry.text}
-              </div>
-            );
-          }
-          return (
-            <div key={i} className="bot-block">
-              <div className="bubble bot">{renderText(entry.text)}</div>
-              {entry.comparisons?.map((c, j) => <ComparisonCard key={j} data={c.result} />)}
-            </div>
-          );
         })}
 
         {sending && <div className="typing">היועץ בודק ומחשב...</div>}
@@ -199,11 +208,8 @@ export default function ChatPage() {
           void send(input);
         }}
       >
-        <label htmlFor="message" className="sr-only" hidden>
-          הודעה ליועץ
-        </label>
         <textarea
-          id="message"
+          aria-label="הודעה ליועץ"
           rows={1}
           value={input}
           placeholder="כתבו כאן..."
