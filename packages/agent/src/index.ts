@@ -3,4 +3,8 @@ export * from "./session";
 export * from "./tools";
 export * from "./memory";
 export * from "./prompt";
+export * from "./turn";
+export * from "./claude";
+export * from "./gemini";
+export * from "./gemini-schema";
 export * from "./agent";

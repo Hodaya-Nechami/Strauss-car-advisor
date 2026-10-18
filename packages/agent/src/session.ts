@@ -1,20 +1,40 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import type { Content } from "@google/genai";
 import type { EmployeeProfile } from "@strauss/engine";
+
+export type Provider = "claude" | "gemini";
+
+export interface RepQuestionRecord {
+  ticketId: string;
+  about: string;
+  question: string;
+}
+
+export interface RepAnswerRecord extends RepQuestionRecord {
+  answer: string;
+  answeredAt: string;
+}
 
 /**
  * כל מה שנשמר על שיחה אחת. נשמר במסד הנתונים כמו שהוא (משימה N6).
- * messages היא ההיסטוריה המלאה שנשלחת ל-Claude: מוסיפים בסוף בלבד, ואף פעם לא עורכים הודעה קודמת.
+ * ההיסטוריה נשמרת בפורמט של המודל שהשיחה התחילה איתו: messages ל-Claude, או geminiContents ל-Gemini.
+ * בשתיהן מוסיפים בסוף בלבד, ואף פעם לא עורכים הודעה קודמת.
  */
 export interface SessionState {
   id: string;
+  /** המודל שהשיחה התחילה איתו. נקבע בתור הראשון ולא משתנה. */
+  provider?: Provider;
   profile: Partial<EmployeeProfile>;
   /** שאלות שנשלחו לנציג ועוד לא נענו */
-  pendingQuestions: { ticketId: string; about: string; question: string }[];
+  pendingQuestions: RepQuestionRecord[];
+  /** שאלות שהנציג כבר ענה עליהן */
+  repAnswers: RepAnswerRecord[];
   messages: Anthropic.Beta.BetaMessageParam[];
+  geminiContents: Content[];
 }
 
 export function newSession(id: string): SessionState {
-  return { id, profile: {}, pendingQuestions: [], messages: [] };
+  return { id, profile: {}, pendingQuestions: [], repAnswers: [], messages: [], geminiContents: [] };
 }
 
 /** שדות חובה לכל חישוב נטו, עם השם שלהם בעברית לשאלה לעובד */

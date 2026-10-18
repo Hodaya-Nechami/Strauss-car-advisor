@@ -12,9 +12,10 @@ import type { CatalogCar, EmployeeProfile, Occupation, Rules } from "@strauss/en
 import {
   CatalogDataSource,
   MemoryRepQueue,
-  agentOptionsFromEnv,
-  createClaudeClient,
+  appendUserNote,
+  createAgentOptionsFromEnv,
   describeAgentError,
+  resolveProvider,
   newSession,
   resumeWithRepAnswer,
   runTool,
@@ -88,15 +89,22 @@ function state(): ServerState {
   return g.__straussState;
 }
 
+/** הגדרות הבוט: Gemini אם יש GEMINI_API_KEY, אחרת Claude. נבנות פעם אחת לכל תהליך. */
 function agentOptions(s: ServerState): AgentOptions {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new ChatError(
-      503,
-      "חסר מפתח API של Claude. צרו את הקובץ apps/web/.env.local עם השורה ANTHROPIC_API_KEY=המפתח שלכם, ואז הפעילו את השרת מחדש.",
-    );
+  if (!s.agent) {
+    try {
+      s.agent = createAgentOptionsFromEnv(process.env);
+    } catch (err) {
+      const e = describeAgentError(err);
+      throw new ChatError(e.status, e.message);
+    }
   }
-  s.agent ??= agentOptionsFromEnv(createClaudeClient());
   return s.agent;
+}
+
+/** הודעה בשם העובד שלא נכתבה בצ'אט, בהיסטוריה של המודל הנכון */
+function note(chat: StoredChat, text: string) {
+  appendUserNote(chat.session, text, resolveProvider(process.env) ?? "claude");
 }
 
 function context(s: ServerState, chat: StoredChat): ToolContext {
@@ -210,10 +218,7 @@ export async function recalculate(sessionId: string, today: unknown, alternative
       alt && t
         ? `נטו היום ${t.net} ₪, נטו בחלופה ${alt.net} ₪, הפרש ${result.diffNet} ₪ בחודש.`
         : (result.explanation as string[]).join(" ");
-    chat.session.messages.push({
-      role: "user",
-      content: `[בדיקה מטבלת ההשוואה, לא בצ'אט] העובד בדק חלופה: ${JSON.stringify(alternative)}. ${summary}`,
-    });
+    note(chat, `[בדיקה מטבלת ההשוואה, לא בצ'אט] העובד בדק חלופה: ${JSON.stringify(alternative)}. ${summary}`);
     chat.transcript.push({ role: "calc", text: "בדיקת חלופה מטבלת ההשוואה", comparisons: [{ input: { today, alternative }, result }], at: now() });
   });
   return view(chat);
@@ -242,10 +247,7 @@ export async function updateProfile(sessionId: string, patch: Record<string, unk
       .filter(([, v]) => v !== undefined)
       .map(([k, v]) => `${PROFILE_LABELS[k] ?? k}: ${String(v)}`)
       .join(", ");
-    chat.session.messages.push({
-      role: "user",
-      content: `[עדכון מטופס הנתונים, לא בצ'אט] העובד עדכן את הנתונים שלו: ${changed}. הנתונים כבר נשמרו.`,
-    });
+    note(chat, `[עדכון מטופס הנתונים, לא בצ'אט] העובד עדכן את הנתונים שלו: ${changed}. הנתונים כבר נשמרו.`);
     chat.transcript.push({ role: "notice", text: "הנתונים עודכנו", at: now() });
   });
   return view(chat);

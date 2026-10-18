@@ -284,6 +284,18 @@ export const tools = {
     },
   }),
 
+  get_rep_answers: def({
+    description:
+      "מחזיר את התשובות שהתקבלו מהנציג לשאלות ששלחת, ואת השאלות שעדיין מחכות לתשובה. " +
+      "רק התשובות שהכלי הזה מחזיר הן תשובות אמיתיות של נציג.",
+    schema: z.object({}),
+    run: async (_input, ctx) => ({
+      ok: true,
+      answers: ctx.session.repAnswers,
+      stillWaiting: ctx.session.pendingQuestions,
+    }),
+  }),
+
   ask_representative: def({
     description:
       "שולח שאלה לנציג התחבורה כשחסר נתון שהעובד לא יודע (למשל השתתפות ברכב חדש), " +
