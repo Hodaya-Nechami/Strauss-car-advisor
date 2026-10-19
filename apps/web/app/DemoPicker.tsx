@@ -7,11 +7,24 @@
  */
 import { useEffect, useState, type CSSProperties } from "react";
 import { CarThumb } from "./CarImage";
+import { Icon } from "./Icon";
 import type { ChatView, Persona } from "./types";
 
-interface DemoData {
+export interface DemoData {
   personas: Persona[];
   verified: { matched: number; total: number };
+}
+
+/** העובדים לדוגמה והבדיקה החיה מול נטו הייחוס. נטען פעם אחת לכל העמוד. */
+export function useDemoData(): DemoData | null {
+  const [data, setData] = useState<DemoData | null>(null);
+  useEffect(() => {
+    fetch("/api/demo", { cache: "no-store" })
+      .then((res) => (res.ok ? (res.json() as Promise<DemoData>) : null))
+      .then(setData)
+      .catch(() => undefined);
+  }, []);
+  return data;
 }
 
 const initials = (name: string) =>
@@ -21,17 +34,9 @@ const initials = (name: string) =>
     .join("")
     .slice(0, 2);
 
-export function DemoPicker({ onView }: { onView: (v: ChatView) => void }) {
-  const [data, setData] = useState<DemoData | null>(null);
+export function DemoPicker({ data, onView }: { data: DemoData | null; onView: (v: ChatView) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("/api/demo", { cache: "no-store" })
-      .then((res) => (res.ok ? (res.json() as Promise<DemoData>) : null))
-      .then(setData)
-      .catch(() => undefined);
-  }, []);
 
   if (!data || data.personas.length === 0) return null;
   const { matched, total } = data.verified;
@@ -57,15 +62,20 @@ export function DemoPicker({ onView }: { onView: (v: ChatView) => void }) {
   }
 
   return (
-    <section className="demo" aria-labelledby="demo-title">
+    <section className="demo" id="demo" aria-labelledby="demo-title">
       <div className="demo-head">
         <div>
-          <h3 id="demo-title">🎬 רוצים לראות איך זה עובד?</h3>
+          <h3 id="demo-title">
+            <span className="title-icon">
+              <Icon name="play" />
+            </span>
+            רוצים לראות איך זה עובד?
+          </h3>
           <p>בחרו עובד לדוגמה. הנתונים שלו נטענים, והחישוב מופיע מיד, בלי להקליד כלום.</p>
         </div>
         <span className={`proof${matched === total ? "" : " partial"}`}>
           <span className="proof-check" aria-hidden="true">
-            {matched === total ? "✓" : "!"}
+            <Icon name={matched === total ? "check" : "alert"} size={14} />
           </span>
           <span>
             נבדק עכשיו: <strong>{matched} מתוך {total}</strong> העובדים לדוגמה של המארגנים יוצאים זהים עד השקל
@@ -100,7 +110,15 @@ export function DemoPicker({ onView }: { onView: (v: ChatView) => void }) {
               <CarThumb carId={p.alternative.carId} kind={p.alternative.kind} />
             </span>
             <span className="persona-q">״{p.question}״</span>
-            <span className="persona-cta">{busy === p.id ? "טוען..." : "▶ הפעלה"}</span>
+            <span className="persona-cta">
+              {busy === p.id ? (
+                "טוען..."
+              ) : (
+                <>
+                  <Icon name="play" size={14} /> הפעלה
+                </>
+              )}
+            </span>
           </button>
         ))}
       </div>

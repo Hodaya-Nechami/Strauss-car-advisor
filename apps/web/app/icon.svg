@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-112 -112 224 224">
+  <g transform="translate(-6 12)">
+    <path d="M0 0 C18.75 -20 27.5 -62 13.75 -100 C7.5 -72 -7.5 -38 0 0Z" fill="#C0E46C" transform="rotate(6)"/>
+    <path d="M0 0 C16.88 -18 24.75 -55.8 12.38 -90 C6.75 -64.8 -6.75 -34.2 0 0Z" fill="#90D8E4" transform="rotate(141)"/>
+    <path d="M0 0 C16.13 -17.2 23.65 -53.32 11.83 -86 C6.45 -61.92 -6.45 -32.68 0 0Z" fill="#6C9C18" transform="rotate(72)"/>
+    <path d="M0 0 C16.2 -16 23.76 -49.6 11.88 -80 C6.48 -57.6 -6.48 -30.4 0 0Z" fill="#3C90CC" transform="rotate(94)"/>
+    <path d="M0 0 C16.38 -15.6 24.02 -48.36 12.01 -78 C6.55 -56.16 -6.55 -29.64 0 0Z" fill="#C0E46C" transform="rotate(-40)"/>
+    <path d="M0 0 C15.12 -14.4 22.18 -44.64 11.09 -72 C6.05 -51.84 -6.05 -27.36 0 0Z" fill="#C0E46C" transform="rotate(38)"/>
+    <path d="M0 0 C15.75 -14 23.1 -43.4 11.55 -70 C6.3 -50.4 -6.3 -26.6 0 0Z" fill="#48C0E4" transform="rotate(116)"/>
+    <path d="M0 0 C17.85 -14 26.18 -43.4 13.09 -70 C7.14 -50.4 -7.14 -26.6 0 0Z" fill="#E42418" transform="rotate(-96)"/>
+    <path d="M0 0 C13.5 -12 19.8 -37.2 9.9 -60 C5.4 -43.2 -5.4 -22.8 0 0Z" fill="#6C9C18" transform="rotate(-28)"/>
+    <path d="M0 0 C14.04 -10.4 20.59 -32.24 10.3 -52 C5.62 -37.44 -5.62 -19.76 0 0Z" fill="#F06C18" transform="rotate(-74)"/>
+    <path d="M0 0 C12.6 -11.2 18.48 -34.72 9.24 -56 C5.04 -40.32 -5.04 -21.28 0 0Z" fill="#F06C18" transform="rotate(0)"/>
+    <path d="M0 0 C13.44 -12.8 19.71 -39.68 9.86 -64 C5.38 -46.08 -5.38 -24.32 0 0Z" fill="#3C90CC" transform="rotate(156)"/>
+    <path d="M0 0 C14.88 -12.4 21.82 -38.44 10.91 -62 C5.95 -44.64 -5.95 -23.56 0 0Z" fill="#E42418" transform="rotate(172)"/>
+  </g>
+</svg>

@@ -28,7 +28,7 @@ export function useCountUp(target: number, ms = 900): number {
   return value;
 }
 
-const COLORS = ["#6d4aff", "#ff6b8b", "#ffc83d", "#1c9e80", "#3a7bff", "#ff9f43"];
+const COLORS = ["#e3261c", "#f26d1f", "#c2e46f", "#6fa020", "#3d91cf", "#4ac1e6", "#ffc83d"];
 
 /** פרץ קונפטי חד-פעמי מעל האלמנט שמכיל אותו */
 export function Confetti({ pieces = 26 }: { pieces?: number }) {
@@ -44,7 +44,7 @@ export function Confetti({ pieces = 26 }: { pieces?: number }) {
           "--d": `${(i % 5) * 40}ms`,
           background: COLORS[i % COLORS.length],
         } as CSSProperties;
-        return <i key={i} style={style} className={i % 3 === 0 ? "round" : undefined} />;
+        return <i key={i} style={style} className={i % 3 === 0 ? "round" : "leaf"} />;
       })}
     </span>
   );

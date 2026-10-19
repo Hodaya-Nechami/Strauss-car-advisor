@@ -1,5 +1,6 @@
 /** מידע תצוגה על רכבי הקטלוג: סוג מרכב לציור חלופי, צבע, ותוויות בעברית. */
 import carImagesJson from "./car-images.json";
+import type { IconName } from "./Icon";
 
 export type BodyType = "city" | "hatch" | "sedan" | "suv" | "van";
 
@@ -42,7 +43,7 @@ export const BODY_TYPES: Record<string, BodyType> = {
 };
 
 /** צבע לציור, קבוע לכל רכב */
-const PALETTE = ["#6d4aff", "#ff6b8b", "#16a3a3", "#f59f2a", "#3a7bff", "#9a5cf0", "#e8505b", "#2fae6a"];
+const PALETTE = ["#e3261c", "#3d91cf", "#6fa020", "#f26d1f", "#2b6cb0", "#1f8fb8", "#f0524a", "#4e8a12"];
 
 export function carColor(id: string | undefined): string {
   if (!id) return PALETTE[0]!;
@@ -51,11 +52,11 @@ export function carColor(id: string | undefined): string {
 }
 
 /** תווית ואייקון לכל סוג הנעה */
-export const DRIVES: Record<string, { label: string; icon: string; tone: string }> = {
-  "חשמלי": { label: "חשמלי", icon: "⚡", tone: "electric" },
-  "פלאג-אין": { label: "פלאג-אין", icon: "🔌", tone: "plugin" },
-  "היברידי": { label: "היברידי", icon: "🍃", tone: "hybrid" },
-  "בנזין": { label: "בנזין", icon: "⛽", tone: "petrol" },
+export const DRIVES: Record<string, { label: string; icon: IconName; tone: string }> = {
+  "חשמלי": { label: "חשמלי", icon: "bolt", tone: "electric" },
+  "פלאג-אין": { label: "פלאג-אין", icon: "plug", tone: "plugin" },
+  "היברידי": { label: "היברידי", icon: "leaf", tone: "hybrid" },
+  "בנזין": { label: "בנזין", icon: "fuel", tone: "petrol" },
 };
 
 export const shekel = (n: number) => `${n.toLocaleString("en-US")} ₪`;

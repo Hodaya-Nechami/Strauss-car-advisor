@@ -5,6 +5,7 @@
  */
 import type { CSSProperties } from "react";
 import { shekel } from "./cars";
+import { Icon } from "./Icon";
 import type { BridgeStepView } from "./types";
 
 const PLOT = 190;
@@ -55,7 +56,10 @@ export function NetBridge({ todayNet, altNet, steps }: { todayNet: number; altNe
     <figure className="wf" aria-labelledby="wf-title">
       <figcaption className="wf-head">
         <span id="wf-title" className="wf-title">
-          💸 לאן הלך כל שקל?
+          <span className="title-icon small">
+            <Icon name="chart" size={17} />
+          </span>
+          לאן הלך כל שקל?
         </span>
         <span className="wf-legend" aria-hidden="true">
           <span>

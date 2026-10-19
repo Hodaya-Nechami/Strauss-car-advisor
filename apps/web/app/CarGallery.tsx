@@ -1,6 +1,7 @@
 /** גלריית רכבים: מה שהבוט הציע, הרכב של העובד היום, או רכב שהוא שוקל. */
 import { CarImage } from "./CarImage";
 import { DRIVES, shekel } from "./cars";
+import { Icon } from "./Icon";
 import type { CarGroup } from "./types";
 
 const TITLES: Record<CarGroup["purpose"], string> = {
@@ -29,7 +30,7 @@ export function CarGallery({ group }: { group: CarGroup }) {
                   <span className="chip group">{car.group === "משפחתי" ? "מסלול משפחתי" : `קבוצה ${car.group}`}</span>
                   {drive && (
                     <span className={`chip drive ${drive.tone}`}>
-                      <span aria-hidden="true">{drive.icon}</span> {drive.label}
+                      <Icon name={drive.icon} size={14} /> {drive.label}
                     </span>
                   )}
                 </div>

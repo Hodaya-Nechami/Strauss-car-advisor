@@ -336,7 +336,7 @@ export async function startDemo(personaId: string): Promise<ChatView> {
     const reference = checkAgainstReference(comparison, sc.reference);
 
     chat.transcript.push(
-      { role: "notice", text: `🎬 הדגמה: ${e.name}, ${e.occupation}, קבוצה ${e.group}`, at: now() },
+      { role: "notice", text: `הדגמה: ${e.name}, ${e.occupation}, קבוצה ${e.group}`, at: now() },
       { role: "employee", text: e.question, at: now() },
       {
         role: "calc",
@@ -414,7 +414,7 @@ export async function updateProfile(
           (car.length ? `הוא אישר גם: ${car.join("; ")}. ` : "") +
           "הנתונים כבר נשמרו, ואין צורך לשאול עליהם שוב. עדיין צריך לברר מה שלא מופיע בתלוש, למשל קבוצת הזכאות ואיזה רכב יש לו היום.",
       );
-      chat.transcript.push({ role: "notice", text: "📄 הנתונים מהתלוש נשמרו. התלוש עצמו לא נשמר.", at: now() });
+      chat.transcript.push({ role: "notice", text: "הנתונים מהתלוש נשמרו. התלוש עצמו לא נשמר.", at: now() });
     } else {
       note(chat, `[עדכון מטופס הנתונים, לא בצ'אט] העובד עדכן את הנתונים שלו: ${changed}. הנתונים כבר נשמרו.`);
       chat.transcript.push({ role: "notice", text: "הנתונים עודכנו", at: now() });

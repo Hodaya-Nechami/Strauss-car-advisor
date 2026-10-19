@@ -5,14 +5,15 @@
  * מעל הקו של היום = יותר כסף בחודש, מתחתיו = פחות. לחיצה על חלופה פותחת השוואה מלאה.
  * כל המספרים מגיעים מהכלי rank_alternatives, כלומר ממנוע החישוב.
  */
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import { Bloom } from "./Bloom";
 import { CarThumb } from "./CarImage";
 import { DRIVES, shekel } from "./cars";
+import { Icon } from "./Icon";
 import { Confetti, useCountUp } from "./motion";
 import type { ChatView, RankedOptionView, RankingView } from "./types";
 
 const SHOW_FIRST = 6;
-const MEDALS = ["🥇", "🥈", "🥉"];
 
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${shekel(Math.abs(n))}`;
 
@@ -20,11 +21,21 @@ const nameOf = (o: RankedOptionView) => (o.kind === "waiver" ? "ויתור על 
 const keyOf = (o: RankedOptionView) => o.carId ?? o.kind;
 const typeOf = (o: RankedOptionView) => (o.kind === "waiver" ? "waiver" : (o.drive ?? "other"));
 
-function metaOf(o: RankedOptionView): string {
+function metaOf(o: RankedOptionView): ReactNode {
   if (o.kind === "waiver") return `אחזקת רכב ${shekel(o.maintenance ?? 0)} בחודש`;
   const drive = o.drive ? DRIVES[o.drive] : undefined;
   const group = o.group === "משפחתי" ? "מסלול משפחתי" : `קבוצה ${o.group}`;
-  return [group, drive ? `${drive.icon} ${drive.label}` : undefined].filter(Boolean).join(" · ");
+  return (
+    <>
+      {group}
+      {drive && (
+        <>
+          {" · "}
+          <Icon name={drive.icon} size={13} /> {drive.label}
+        </>
+      )}
+    </>
+  );
 }
 
 function tooltipOf(o: RankedOptionView): string {
@@ -38,8 +49,11 @@ function Winner({ option, onOpen, busy }: { option: RankedOptionView; onOpen?: (
   const amount = useCountUp(option.diffNet);
   return (
     <button type="button" className="winner" onClick={onOpen} disabled={!onOpen || busy}>
+      <Bloom size={210} variant="hero" className="winner-bloom" />
       <Confetti />
-      <span className="winner-ribbon">👑 הכי משתלם לך</span>
+      <span className="winner-ribbon">
+        <Icon name="crown" size={15} /> הכי משתלם לך
+      </span>
       <CarThumb carId={option.carId} kind={option.kind} size="big" />
       <span className="winner-body">
         <span className="winner-name">
@@ -52,7 +66,11 @@ function Winner({ option, onOpen, busy }: { option: RankedOptionView; onOpen?: (
         <span className="winner-caption">
           יותר בנטו בכל חודש · <bdi>{signed(option.diffNet * 12)}</bdi> בשנה
         </span>
-        {onOpen && <span className="winner-cta">{busy ? "מחשב..." : "לפירוט המלא ←"}</span>}
+        {onOpen && (
+          <span className="winner-cta">
+            {busy ? "מחשב..." : "לפירוט המלא"} <Icon name="arrowLeft" size={16} />
+          </span>
+        )}
       </span>
     </button>
   );
@@ -120,7 +138,12 @@ export function RankingCard({
   return (
     <section className="card ranking" aria-label="מה הכי משתלם לך">
       <div className="card-head">
-        <div className="card-title">🏆 מה הכי משתלם לך?</div>
+        <div className="card-title">
+          <span className="title-icon">
+            <Icon name="trophy" />
+          </span>
+          מה הכי משתלם לך?
+        </div>
         <span className="badge count">{options.length} אפשרויות</span>
       </div>
       <p className="ranking-sub">
@@ -131,14 +154,29 @@ export function RankingCard({
       {best && best.diffNet > 0 ? (
         <Winner option={best} onOpen={interactive ? () => void open(best) : undefined} busy={opening === keyOf(best)} />
       ) : (
-        <div className="today-best">👍 המצב שלך היום משתלם יותר מכל חלופה אחרת, מבחינת הנטו.</div>
+        <div className="today-best">
+          <Icon name="check" /> המצב שלך היום משתלם יותר מכל חלופה אחרת, מבחינת הנטו.
+        </div>
       )}
 
       {types.length > 1 && (
         <div className="rank-filters" role="group" aria-label="סינון לפי סוג">
           {["all", ...types].map((t) => {
             const drive = DRIVES[t];
-            const label = t === "all" ? "הכול" : t === "waiver" ? "🔑 ויתור" : drive ? `${drive.icon} ${drive.label}` : t;
+            const label =
+              t === "all" ? (
+                "הכול"
+              ) : t === "waiver" ? (
+                <>
+                  <Icon name="key" size={15} /> ויתור
+                </>
+              ) : drive ? (
+                <>
+                  <Icon name={drive.icon} size={15} /> {drive.label}
+                </>
+              ) : (
+                t
+              );
             return (
               <button
                 key={t}
@@ -168,7 +206,9 @@ export function RankingCard({
                 onClick={() => void open(o)}
                 disabled={!interactive || opening !== null}
               >
-                <span className="rank-pos">{o.diffNet > 0 && MEDALS[rank] ? MEDALS[rank] : rank + 1}</span>
+                <span className={`rank-pos${o.diffNet > 0 ? (rank === 0 ? " first" : rank < 3 ? " top" : "") : ""}`}>
+                  {rank + 1}
+                </span>
                 <CarThumb carId={o.carId} kind={o.kind} />
                 <span className="rank-name">
                   <bdi>{nameOf(o)}</bdi>

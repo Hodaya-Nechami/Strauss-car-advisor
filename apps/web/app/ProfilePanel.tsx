@@ -1,20 +1,34 @@
 "use client";
 
-/** הנתונים שהעובד מסר, עם אפשרות לתקן אותם בלי לכתוב לבוט */
+/** הנתונים שהעובד מסר, בתפריט הצד: תקציר קריא, ועריכה בלי לכתוב לבוט */
 import { useEffect, useState, type FormEvent } from "react";
+import { shekel } from "./cars";
+import { Icon } from "./Icon";
 import type { ChatView, Profile } from "./types";
 
 const NUMBER_FIELDS: { key: keyof Profile; label: string; step: string }[] = [
-  { key: "baseSalary", label: "שכר בסיס חודשי (₪)", step: "1" },
-  { key: "commissions", label: "עמלות חודשיות (₪)", step: "1" },
-  { key: "bonus", label: "בונוס חודשי (₪)", step: "1" },
-  { key: "pensionRate", label: "הפרשה לפנסיה (%)", step: "0.1" },
-  { key: "studyFundRate", label: "הפרשה לקרן השתלמות (%)", step: "0.1" },
+  { key: "baseSalary", label: "שכר בסיס (₪)", step: "1" },
+  { key: "commissions", label: "עמלות (₪)", step: "1" },
+  { key: "bonus", label: "בונוס (₪)", step: "1" },
+  { key: "pensionRate", label: "פנסיה (%)", step: "0.1" },
+  { key: "studyFundRate", label: "קרן השתלמות (%)", step: "0.1" },
   { key: "creditPoints", label: "נקודות זיכוי", step: "0.25" },
-  { key: "childrenUnder23", label: "ילדים עד גיל 23", step: "1" },
+  { key: "childrenUnder23", label: "ילדים עד 23", step: "1" },
 ];
 
 const GROUPS = ["א", "ב", "ג", "ד"];
+
+/** איך כל נתון נראה בתקציר */
+const SUMMARY: { key: keyof Profile; label: string; show: (v: number | string) => string }[] = [
+  { key: "group", label: "קבוצת זכאות", show: (v) => String(v) },
+  { key: "baseSalary", label: "שכר בסיס", show: (v) => shekel(Number(v)) },
+  { key: "commissions", label: "עמלות", show: (v) => shekel(Number(v)) },
+  { key: "bonus", label: "בונוס", show: (v) => shekel(Number(v)) },
+  { key: "pensionRate", label: "פנסיה", show: (v) => `${v}%` },
+  { key: "studyFundRate", label: "קרן השתלמות", show: (v) => `${v}%` },
+  { key: "creditPoints", label: "נקודות זיכוי", show: (v) => String(v) },
+  { key: "childrenUnder23", label: "ילדים עד 23", show: (v) => String(v) },
+];
 
 function toStrings(p: Profile): Record<string, string> {
   return Object.fromEntries(
@@ -31,6 +45,7 @@ export function ProfilePanel({
   profile: Profile;
   onView: (v: ChatView) => void;
 }) {
+  const [editing, setEditing] = useState(false);
   const [values, setValues] = useState(() => toStrings(profile));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,8 +55,6 @@ export function ProfilePanel({
   useEffect(() => {
     setValues(toStrings(JSON.parse(profileKey) as Profile));
   }, [profileKey]);
-
-  const filled = Object.values(profile).filter((v) => v !== undefined).length;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -67,7 +80,10 @@ export function ProfilePanel({
       });
       const data = (await res.json()) as ChatView & { error?: string };
       if (!res.ok) setError(data.error ?? "העדכון נכשל");
-      else onView(data);
+      else {
+        onView(data);
+        setEditing(false);
+      }
     } catch {
       setError("אין חיבור לשרת");
     } finally {
@@ -75,42 +91,65 @@ export function ProfilePanel({
     }
   }
 
+  const known = SUMMARY.filter((s) => profile[s.key] !== undefined);
+
   return (
-    <details className="profile">
-      <summary>
-        📋 הנתונים שלי <span className="muted">({filled} שדות)</span>
-      </summary>
-      <form onSubmit={submit} className="profile-form">
-        <label>
-          קבוצת זכאות
-          <select value={values.group} onChange={(e) => setValues({ ...values, group: e.target.value })}>
-            <option value="">לא ידוע</option>
-            {GROUPS.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
+    <div className="profile">
+      {!editing && (
+        <>
+          <dl className="profile-summary">
+            {known.map((s) => (
+              <div key={s.key}>
+                <dt>{s.label}</dt>
+                <dd>
+                  <bdi>{s.show(profile[s.key] as number | string)}</bdi>
+                </dd>
+              </div>
             ))}
-          </select>
-        </label>
-        {NUMBER_FIELDS.map((f) => (
-          <label key={f.key}>
-            {f.label}
-            <input
-              type="number"
-              min="0"
-              step={f.step}
-              inputMode="decimal"
-              value={values[f.key]}
-              onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
-            />
+          </dl>
+          {profile.occupation && <div className="profile-occupation">{profile.occupation}</div>}
+          <button type="button" className="rail-link" onClick={() => setEditing(true)}>
+            <Icon name="edit" size={16} /> תיקון נתונים
+          </button>
+        </>
+      )}
+      {editing && (
+        <form onSubmit={submit} className="profile-form">
+          <label>
+            קבוצת זכאות
+            <select value={values.group} onChange={(e) => setValues({ ...values, group: e.target.value })}>
+              <option value="">לא ידוע</option>
+              {GROUPS.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
           </label>
-        ))}
-        {profile.occupation && <div className="muted">עיסוק: {profile.occupation}</div>}
-        <button type="submit" className="small-button" disabled={busy}>
-          {busy ? "שומר..." : "שמירה"}
-        </button>
-        {error && <div className="error">{error}</div>}
-      </form>
-    </details>
+          {NUMBER_FIELDS.map((f) => (
+            <label key={f.key}>
+              {f.label}
+              <input
+                type="number"
+                min="0"
+                step={f.step}
+                inputMode="decimal"
+                value={values[f.key]}
+                onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+              />
+            </label>
+          ))}
+          <div className="profile-actions">
+            <button type="submit" className="small-button" disabled={busy}>
+              {busy ? "שומר..." : "שמירה"}
+            </button>
+            <button type="button" className="rail-link" onClick={() => setEditing(false)} disabled={busy}>
+              ביטול
+            </button>
+          </div>
+          {error && <div className="error">{error}</div>}
+        </form>
+      )}
+    </div>
   );
 }

@@ -107,7 +107,7 @@ describe("לאן הלך כל שקל, ומה הכי משתלם", () => {
     const html = renderToStaticMarkup(<RankingCard data={data} />);
     const text = visibleText(html);
 
-    expect(text).toMatch(/👑 הכי משתלם לך (₪ )?ויתור על הרכב אחזקת רכב 2,000 ₪ בחודש \+3,199 ₪/);
+    expect(text).toMatch(/הכי משתלם לך (₪ )?ויתור על הרכב אחזקת רכב 2,000 ₪ בחודש \+3,199 ₪/);
     expect(text).toContain("+3,199 ₪");
     expect(text).toContain("+38,388 ₪ בשנה");
     expect(text).toMatch(/לעומת היום \( ?COROLLA CROSS \(2025\) ?, 11,032 ₪ נטו\)/);
@@ -153,9 +153,9 @@ describe("קריאת תלוש: כרטיס האישור", () => {
     );
     const text = visibleText(html);
     expect(text).toContain("זה מה שקראתי מהתלוש (09/2026)");
-    expect(text).toContain("✓ חושב: 912 ₪ מתוך שכר של 15,200 ₪");
-    expect(text).toContain("⚪ לא מופיע בתלוש");
-    expect(text).toContain("⚠️ לא מצאתי בתלוש");
+    expect(text).toContain("חושב: 912 ₪ מתוך שכר של 15,200 ₪");
+    expect(text).toContain("לא מופיע בתלוש");
+    expect(text).toContain("לא מצאתי בתלוש");
     expect(text).toContain("ההשתתפות שלי ברכב היום היא");
     expect(text).toContain("לא מצאתי בתלוש נקודות זיכוי.");
     expect(text).toContain("נקרא בעזרת OpenRouter");

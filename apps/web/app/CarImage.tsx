@@ -26,7 +26,7 @@ const SHAPES: Record<BodyType, Shape> = {
   van: { left: 12, right: 188, belt: 50, bottom: 82, roofFrom: 30, roofTo: 168, roofY: 16, front: 30, rear: 8, wheelR: 15, wheels: [46, 154] },
 };
 
-export function CarIllustration({ body = "hatch", color = "#6d4aff" }: { body?: BodyType; color?: string }) {
+export function CarIllustration({ body = "hatch", color = "#e3261c" }: { body?: BodyType; color?: string }) {
   const s = SHAPES[body];
   // המכונית פונה שמאלה, לכיוון הקריאה בעברית
   const cabin = `M${s.roofFrom - s.front} ${s.belt} L${s.roofFrom} ${s.roofY} L${s.roofTo} ${s.roofY} L${s.roofTo + s.rear} ${s.belt} Z`;

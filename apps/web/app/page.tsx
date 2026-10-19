@@ -1,30 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Ambient, Bloom } from "./Bloom";
 import { CarGallery } from "./CarGallery";
 import { ComparisonCard } from "./ComparisonCard";
-import { DemoPicker } from "./DemoPicker";
+import { DemoPicker, useDemoData } from "./DemoPicker";
+import { Icon, type IconName } from "./Icon";
 import { Mascot, type MascotMood } from "./Mascot";
 import { AttachButton, PayslipCard, PayslipDropzone, usePayslip } from "./Payslip";
-import { ProfilePanel } from "./ProfilePanel";
 import { RankingCard } from "./RankingCard";
+import { QUICK_ASKS, Sidebar } from "./Sidebar";
 import type { ChatView, Profile, TranscriptEntry } from "./types";
 
 const SESSION_KEY = "strauss-car-advisor-session";
 const POLL_MS = 4000;
 
-const SUGGESTIONS = [
-  { icon: "🏆", text: "מה הכי משתלם לי מכל הרכבים שמגיעים לי?" },
-  { icon: "⚡", text: "אני שוקל/ת לעבור לרכב חשמלי. כמה זה ישנה לי בנטו?" },
-  { icon: "🔑", text: "אני רוצה לוותר על הרכב ולקבל אחזקה. כמה אקבל?" },
-  { icon: "👨‍👩‍👧‍👦", text: "יש לי 5 ילדים. אפשר לקבל רכב משפחתי?" },
-];
-
-const FEATURES = [
-  { icon: "🎯", text: "חישוב מדויק לשקל" },
-  { icon: "📄", text: "קריאת תלוש שכר" },
-  { icon: "🚗", text: "תמונות של כל הרכבים" },
-  { icon: "🙋", text: "שאלה לנציג כשצריך" },
+const FEATURES: { icon: IconName; text: string }[] = [
+  { icon: "target", text: "חישוב מדויק לשקל" },
+  { icon: "doc", text: "קריאת תלוש שכר" },
+  { icon: "car", text: "תמונות של כל הרכבים" },
+  { icon: "person", text: "שאלה לנציג כשצריך" },
 ];
 
 function readSessionId(): string | null {
@@ -77,8 +72,10 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const payslip = usePayslip();
+  const demo = useDemoData();
 
   const applyView = useCallback((v: ChatView) => {
     setSessionId(v.sessionId);
@@ -171,191 +168,221 @@ export default function ChatPage() {
     </>
   );
 
+  /** פעולה מהתפריט: בטלפון התפריט נסגר, והשיחה ממשיכה */
+  function fromMenu(action: () => void) {
+    setMenuOpen(false);
+    action();
+  }
+
+  function showDemo() {
+    newChat();
+    setTimeout(() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+  }
+
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="topbar-inner">
-          <div className="brand">
-            <Mascot mood={sending ? "thinking" : "idle"} size={54} />
-            <div>
-              <h1>יועץ הרכב של שטראוס</h1>
-              <p>אני נטו, ואני אגיד לך בדיוק מה יקרה לנטו שלך</p>
-            </div>
-          </div>
-          {transcript.length > 0 && (
-            <button type="button" className="ghost-button" onClick={newChat}>
-              שיחה חדשה
+    <>
+      <Ambient />
+      <div className="shell">
+        <Sidebar
+          open={menuOpen}
+          busy={sending}
+          sessionId={sessionId}
+          profile={profile}
+          proof={demo?.verified ?? null}
+          onClose={() => setMenuOpen(false)}
+          onNewChat={() => fromMenu(newChat)}
+          onAsk={(text) => fromMenu(() => void send(text))}
+          onUpload={(f) => fromMenu(() => void payslip.readFile(f))}
+          onDemo={() => fromMenu(showDemo)}
+          onView={applyView}
+        />
+
+        <div className="main">
+          <header className="mobilebar">
+            <button type="button" className="icon-button" onClick={() => setMenuOpen(true)} aria-label="פתיחת התפריט">
+              <Icon name="menu" />
             </button>
-          )}
-        </div>
-      </header>
+            <div className="mobilebar-brand">
+              <Bloom size={30} variant={sending ? "thinking" : "mark"} />
+              <span>
+                יועץ הרכב של <b>שטראוס</b>
+              </span>
+            </div>
+            <button type="button" className="icon-button" onClick={newChat} aria-label="שיחה חדשה">
+              <Icon name="plus" />
+            </button>
+          </header>
 
-      <main className="page">
-        {sessionId && Object.keys(profile).length > 0 && (
-          <ProfilePanel sessionId={sessionId} profile={profile} onView={applyView} />
-        )}
-
-        <div className="messages" aria-live="polite">
-          {transcript.length === 0 && (
-            <section className="hero">
-              <div className="hero-art">
-                <Mascot mood="happy" size={170} title="נטו, יועץ הרכב" />
-              </div>
-              <div className="hero-text">
-                <div className="speech">היי! אני נטו 👋</div>
-                <h2>מה יקרה לנטו שלך?</h2>
-                <p>
-                  ספרו לי איזה רכב יש לכם ומה אתם שוקלים: רכב אחר, רכב חשמלי או ויתור על הרכב. אחשב בדיוק כמה הנטו
-                  ישתנה, לפי כללי החברה ונתוני רשות המסים. אם יחסר לי משהו שרק החברה יודעת, אשאל את הנציג.
-                </p>
-                <div className="features">
-                  {FEATURES.map((f) => (
-                    <span key={f.text} className="feature">
-                      <span aria-hidden="true">{f.icon}</span> {f.text}
+          <main className="stream">
+            <div className="messages" aria-live="polite">
+              {transcript.length === 0 && (
+                <section className="welcome">
+                  <div className="welcome-text">
+                    <span className="eyebrow">
+                      <Bloom size={18} variant="mark" />
+                      יועץ הרכב של שטראוס
                     </span>
-                  ))}
-                </div>
-                <div className="suggestions">
-                  {SUGGESTIONS.map((s) => (
-                    <button key={s.text} type="button" className="suggestion" onClick={() => send(s.text)}>
-                      <span className="suggestion-icon" aria-hidden="true">
-                        {s.icon}
-                      </span>
-                      {s.text}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
-          )}
-          {transcript.length === 0 && payslip.slip.phase === "idle" && (
-            <>
-              <PayslipDropzone onFile={payslip.readFile} onSample={payslip.readSample} />
-              <DemoPicker onView={applyView} />
-            </>
-          )}
-
-          {transcript.map((entry, i) => {
-            if (entry.role === "employee") {
-              return (
-                <div key={i} className="bubble employee">
-                  {entry.text}
-                </div>
-              );
-            }
-            if (entry.role === "notice") {
-              return (
-                <div key={i} className="notice">
-                  {entry.text}
-                </div>
-              );
-            }
-            if (entry.role === "calc") {
-              return (
-                <div key={i} className="bot-row">
-                  <div className="avatar">
-                    <Mascot mood={moodFor(entry)} size={42} />
-                  </div>
-                  <div className="bot-content">
-                    <div className="notice inline">{entry.text}</div>
-                    {cards(entry)}
-                  </div>
-                </div>
-              );
-            }
-            return (
-              <div key={i} className="bot-row">
-                <div className="avatar">
-                  <Mascot mood={moodFor(entry)} size={42} />
-                </div>
-                <div className="bot-content">
-                  <div className="bubble bot">{renderText(entry.text)}</div>
-                  {entry.via && entry.via.length > 0 && (
-                    <div className="via">
-                      {entry.via.length === 1 ? "ענה" : "ענו"}: {entry.via.join(", ")}
+                    <h2>
+                      מה יקרה ל<em>נטו</em> שלך?
+                    </h2>
+                    <p>
+                      ספרו לי איזה רכב יש לכם ומה אתם שוקלים: רכב אחר, רכב חשמלי או ויתור על הרכב. אחשב בדיוק כמה
+                      הנטו ישתנה, לפי כללי החברה ונתוני רשות המסים. אם יחסר לי משהו שרק החברה יודעת, אשאל את הנציג.
+                    </p>
+                    <ul className="features">
+                      {FEATURES.map((f) => (
+                        <li key={f.text}>
+                          <Icon name={f.icon} size={17} /> {f.text}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="suggestions">
+                      {QUICK_ASKS.map((s) => (
+                        <button key={s.text} type="button" className="suggestion" onClick={() => send(s.text)}>
+                          <span className="suggestion-icon">
+                            <Icon name={s.icon} />
+                          </span>
+                          <span>{s.text}</span>
+                        </button>
+                      ))}
                     </div>
-                  )}
-                  {entry.cars?.map((g, j) => <CarGallery key={j} group={g} />)}
-                  {cards(entry)}
+                  </div>
+                  <div className="welcome-art">
+                    <div className="welcome-glow" aria-hidden="true" />
+                    <Bloom size={340} variant="hero" />
+                    <div className="hero-car">
+                      <Mascot mood="happy" size={136} title="נטו, יועץ הרכב" />
+                    </div>
+                    <div className="speech">היי! אני נטו</div>
+                  </div>
+                </section>
+              )}
+              {transcript.length === 0 && payslip.slip.phase === "idle" && (
+                <>
+                  <PayslipDropzone onFile={payslip.readFile} onSample={payslip.readSample} />
+                  <DemoPicker data={demo} onView={applyView} />
+                </>
+              )}
+
+              {transcript.map((entry, i) => {
+                if (entry.role === "employee") {
+                  return (
+                    <div key={i} className="bubble employee">
+                      {entry.text}
+                    </div>
+                  );
+                }
+                if (entry.role === "notice") {
+                  return (
+                    <div key={i} className="notice">
+                      {entry.text}
+                    </div>
+                  );
+                }
+                if (entry.role === "calc") {
+                  return (
+                    <div key={i} className="bot-row">
+                      <div className="avatar">
+                        <Mascot mood={moodFor(entry)} size={42} />
+                      </div>
+                      <div className="bot-content">
+                        <div className="notice inline">{entry.text}</div>
+                        {cards(entry)}
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={i} className="bot-row">
+                    <div className="avatar">
+                      <Mascot mood={moodFor(entry)} size={42} />
+                    </div>
+                    <div className="bot-content">
+                      <div className="bubble bot">{renderText(entry.text)}</div>
+                      {entry.via && entry.via.length > 0 && (
+                        <div className="via">
+                          {entry.via.length === 1 ? "ענה" : "ענו"}: {entry.via.join(", ")}
+                        </div>
+                      )}
+                      {entry.cars?.map((g, j) => <CarGallery key={j} group={g} />)}
+                      {cards(entry)}
+                    </div>
+                  </div>
+                );
+              })}
+
+              <PayslipCard
+                slip={payslip.slip}
+                sessionId={sessionId}
+                onView={applyView}
+                onSaved={(v) => void send("העליתי את תלוש השכר שלי. מה עוד צריך כדי לחשב?", v.sessionId)}
+                onDone={payslip.reset}
+                onSample={payslip.readSample}
+              />
+
+              {sending && (
+                <div className="bot-row">
+                  <div className="avatar">
+                    <Mascot mood="thinking" size={42} />
+                  </div>
+                  <div className="typing-bubble">
+                    <Bloom size={26} variant="thinking" />
+                    נטו בודק ומחשב...
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              )}
 
-          <PayslipCard
-            slip={payslip.slip}
-            sessionId={sessionId}
-            onView={applyView}
-            onSaved={(v) => void send("📄 העליתי את תלוש השכר שלי. מה עוד צריך כדי לחשב?", v.sessionId)}
-            onDone={payslip.reset}
-            onSample={payslip.readSample}
-          />
+              {openQuestions.length > 0 && !sending && (
+                <div className="waiting">
+                  <Mascot mood="waiting" size={52} />
+                  <div>
+                    <strong>ממתין לתשובת הנציג</strong>
+                    <div>{openQuestions.map((q) => q.about).join(", ")}. השיחה תתעדכן כאן לבד כשהתשובה תגיע.</div>
+                  </div>
+                </div>
+              )}
 
-          {sending && (
-            <div className="bot-row">
-              <div className="avatar">
-                <Mascot mood="thinking" size={42} />
-              </div>
-              <div className="typing-bubble">
-                <span className="dots" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-                נטו בודק ומחשב...
-              </div>
+              {error && (
+                <div className="error-box" role="alert">
+                  <Mascot mood="sad" size={46} />
+                  <div>{error}</div>
+                </div>
+              )}
+              <div ref={endRef} />
             </div>
-          )}
 
-          {openQuestions.length > 0 && !sending && (
-            <div className="waiting">
-              <Mascot mood="waiting" size={52} />
-              <div>
-                <strong>ממתין לתשובת הנציג</strong>
-                <div>{openQuestions.map((q) => q.about).join(", ")}. השיחה תתעדכן כאן לבד כשהתשובה תגיע.</div>
-              </div>
-            </div>
-          )}
+            <footer className="footer">
+              תמונות הרכבים מוויקישיתוף, ברישיונות Creative Commons, עם קרדיט לצלמים. הנתונים לדוגמה בלבד.
+            </footer>
+          </main>
 
-          {error && (
-            <div className="error-box" role="alert">
-              <Mascot mood="sad" size={46} />
-              <div>{error}</div>
-            </div>
-          )}
-          <div ref={endRef} />
-        </div>
-
-        <footer className="footer">
-          תמונות הרכבים מוויקישיתוף, ברישיונות Creative Commons, עם קרדיט לצלמים. הנתונים לדוגמה בלבד.
-        </footer>
-      </main>
-
-      <form
-        className="composer"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send(input);
-        }}
-      >
-        <textarea
-          aria-label="הודעה לנטו"
-          rows={1}
-          value={input}
-          placeholder="כתבו לנטו..."
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+          <form
+            className="composer"
+            onSubmit={(e) => {
               e.preventDefault();
               void send(input);
-            }
-          }}
-        />
-        <AttachButton onFile={payslip.readFile} disabled={sending || payslip.slip.phase === "reading"} />
-        <button type="submit" className="send-button" disabled={sending || !input.trim()} aria-label="שליחה">
-          <SendIcon />
-        </button>
-      </form>
-    </div>
+            }}
+          >
+            <textarea
+              aria-label="הודעה לנטו"
+              rows={1}
+              value={input}
+              placeholder="כתבו לנטו..."
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void send(input);
+                }
+              }}
+            />
+            <AttachButton onFile={payslip.readFile} disabled={sending || payslip.slip.phase === "reading"} />
+            <button type="submit" className="send-button" disabled={sending || !input.trim()} aria-label="שליחה">
+              <SendIcon />
+            </button>
+          </form>
+        </div>
+      </div>
+    </>
   );
 }

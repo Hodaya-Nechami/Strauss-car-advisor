@@ -4,8 +4,9 @@
  * העלאת תלוש שכר: העובד מעלה תלוש, נטו קורא ממנו את הנתונים, והעובד מאשר לפני שמירה.
  * שום דבר לא נשמר בלי אישור, והתלוש עצמו לא נשמר בכלל.
  */
-import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { shekel } from "./cars";
+import { Icon } from "./Icon";
 import { Mascot } from "./Mascot";
 import type { ChatView, PayslipFieldKey, PayslipReading } from "./types";
 
@@ -55,6 +56,37 @@ export function usePayslip() {
   }
 
   return { slip, readFile, readSample, reset: () => setSlip({ phase: "idle" }) };
+}
+
+/** כפתור כלשהו שפותח בחירת תלוש */
+export function PickPayslip({
+  onFile,
+  className,
+  children,
+}: {
+  onFile: (f: File) => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <button type="button" className={className} onClick={() => input.current?.click()}>
+        {children}
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept={ACCEPT}
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) onFile(f);
+        }}
+      />
+    </>
+  );
 }
 
 /** כפתור קטן עם קובץ נסתר, לשורת הכתיבה */
@@ -126,18 +158,19 @@ export function PayslipDropzone({ onFile, onSample }: { onFile: (f: File) => voi
         </span>
       </div>
       <div className="dropzone-text">
-        <h3>📄 יש לך תלוש שכר? אני אקרא אותו בשבילך</h3>
+        <h3>יש לך תלוש שכר? אני אקרא אותו בשבילך</h3>
         <p>במקום להקליד שכר, פנסיה ונקודות זיכוי: העלו תלוש, ואני אמלא הכול. תראו בדיוק מה קראתי, ותאשרו לפני שמירה.</p>
         <div className="dropzone-actions">
           <button type="button" className="small-button" onClick={() => input.current?.click()}>
-            העלאת תלוש
+            <Icon name="upload" size={18} /> העלאת תלוש
           </button>
           <button type="button" className="link-button" onClick={onSample}>
             אין תלוש בהישג יד? נסו עם תלוש לדוגמה
           </button>
         </div>
         <p className="dropzone-privacy">
-          🔒 התלוש נשלח לקריאה ולא נשמר אצלנו. בגרסת ההדגמה השתמשו רק בתלוש לדוגמה, לא בתלוש אמיתי.
+          <Icon name="lock" size={15} /> התלוש נשלח לקריאה ולא נשמר אצלנו. בגרסת ההדגמה השתמשו רק בתלוש לדוגמה, לא
+          בתלוש אמיתי.
         </p>
       </div>
       <input
@@ -256,7 +289,12 @@ function Review({
   return (
     <form className="slip-review" onSubmit={save}>
       <div className="card-head">
-        <div className="card-title">📄 זה מה שקראתי מהתלוש{reading.period ? ` (${reading.period})` : ""}</div>
+        <div className="card-title">
+          <span className="title-icon">
+            <Icon name="doc" />
+          </span>
+          זה מה שקראתי מהתלוש{reading.period ? ` (${reading.period})` : ""}
+        </div>
         <span className="badge needs_info">לאישורך</span>
       </div>
       <p className="muted">בדקו שהכול נכון, ותקנו אם צריך. שום דבר לא נשמר עד שתאשרו, והתלוש עצמו לא נשמר בכלל.</p>
@@ -279,7 +317,10 @@ function Review({
                 placeholder="לא נמצא, הקלידו"
                 onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
               />
-              <span className="slip-source">{v ? (v.assumedZero ? "⚪ " : "✓ ") + v.source : "⚠️ לא מצאתי בתלוש"}</span>
+              <span className="slip-source">
+                <Icon name={v ? (v.assumedZero ? "dot" : "check") : "alert"} size={13} />
+                {v ? v.source : "לא מצאתי בתלוש"}
+              </span>
             </label>
           );
         })}
@@ -299,7 +340,9 @@ function Review({
 
       {(participation || reading.car.valueOfUse) && (
         <div className="slip-car">
-          <strong>🚗 מצאתי בתלוש גם את הרכב שלך:</strong>
+          <strong>
+            <Icon name="car" size={18} /> מצאתי בתלוש גם את הרכב שלך:
+          </strong>
           <ul>
             {reading.car.valueOfUse && (
               <li>
@@ -326,7 +369,13 @@ function Review({
 
       <div className="slip-actions">
         <button type="submit" className="small-button" disabled={busy}>
-          {busy ? "שומר..." : "✓ נכון, לשמור"}
+          {busy ? (
+            "שומר..."
+          ) : (
+            <>
+              <Icon name="check" size={18} /> נכון, לשמור
+            </>
+          )}
         </button>
         <button type="button" className="ghost-button" onClick={onDone} disabled={busy}>
           ביטול

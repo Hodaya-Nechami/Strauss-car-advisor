@@ -3,6 +3,7 @@
 /** כרטיס השוואה: היום מול החלופה. כל המספרים מגיעים ממנוע החישוב, לא מהבוט. */
 import { useState, type FormEvent } from "react";
 import { CarImage } from "./CarImage";
+import { Icon } from "./Icon";
 import { shekel } from "./cars";
 import { Mascot } from "./Mascot";
 import { useCountUp } from "./motion";
@@ -133,7 +134,9 @@ function Recalculate({ sessionId, today, onView }: { sessionId: string; today: u
         if ((e.currentTarget as HTMLDetailsElement).open) void loadOptions();
       }}
     >
-      <summary>🔁 לבדוק רכב אחר</summary>
+      <summary>
+        <Icon name="refresh" size={18} /> לבדוק רכב אחר
+      </summary>
       {!options && !error && <div className="muted">טוען...</div>}
       {options && (
         <form onSubmit={submit} className="inline-form">
@@ -202,7 +205,8 @@ function RankButton({ sessionId, today, onView }: { sessionId: string; today: un
   return (
     <div className="rank-cta">
       <button type="button" className="glow-button" onClick={() => void rank()} disabled={busy}>
-        {busy ? "בודק את כל האפשרויות..." : "🏆 מה הכי משתלם לי מכל האפשרויות?"}
+        <Icon name="trophy" />
+        {busy ? "בודק את כל האפשרויות..." : "מה הכי משתלם לי מכל האפשרויות?"}
       </button>
       {error && <div className="error">{error}</div>}
     </div>
@@ -238,7 +242,12 @@ export function ComparisonCard({
   return (
     <section className="card comparison" aria-label="השוואת נטו">
       <div className="card-head">
-        <div className="card-title">השוואה: היום מול החלופה</div>
+        <div className="card-title">
+          <span className="title-icon">
+            <Icon name="car" />
+          </span>
+          השוואה: היום מול החלופה
+        </div>
         <span className={`badge ${eligibility.status}`}>{BADGE[eligibility.status]}</span>
       </div>
 
@@ -270,13 +279,15 @@ export function ComparisonCard({
               )}
             </div>
           </div>
+          {diffNet !== 0 && <span className="diff-pill">{diffNet > 0 ? "▲ עלייה בנטו" : "▼ ירידה בנטו"}</span>}
         </div>
       )}
 
       {reference && (
         <div className={`verified${reference.matches ? "" : " off"}`}>
+          <Icon name={reference.matches ? "shield" : "alert"} size={16} />
           {reference.matches
-            ? "✓ זהה עד השקל לחישוב הייחוס של המארגנים"
+            ? "זהה עד השקל לחישוב הייחוס של המארגנים"
             : `שונה מחישוב הייחוס של המארגנים (שם: ${shekel(reference.expected.diff)})`}
         </div>
       )}
@@ -319,7 +330,9 @@ export function ComparisonCard({
 
       {(t || a) && (
         <details className="more">
-          <summary>🧮 איך חושב?</summary>
+          <summary>
+            <Icon name="calc" size={18} /> איך חושב?
+          </summary>
           <div className="table-wrap">
             <table className="compare details">
               <thead>
