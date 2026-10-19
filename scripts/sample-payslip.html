@@ -1,0 +1,249 @@
+<!doctype html>
+<!--
+  תלוש שכר לדוגמה, עם נתונים מומצאים, להדגמת קריאת התלוש באתר.
+  הסכומים חושבו במנוע החישוב של הפרויקט (לוחות 2025), כך שהנטו בתלוש תואם לחישוב.
+  יצירת ה-PDF מחדש:
+  msedge --headless=new --no-pdf-header-footer --print-to-pdf=apps/web/public/samples/payslip-sample.pdf scripts/sample-payslip.html
+-->
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <title>תלוש שכר לדוגמה</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 14mm;
+      }
+      body {
+        font-family: "Segoe UI", Arial, sans-serif;
+        color: #1d1a33;
+        font-size: 12.5px;
+        margin: 0;
+        position: relative;
+      }
+      .watermark {
+        position: fixed;
+        top: 38%;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 92px;
+        font-weight: 800;
+        color: rgba(109, 74, 255, 0.08);
+        transform: rotate(-24deg);
+        pointer-events: none;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        border-bottom: 3px solid #6d4aff;
+        padding-bottom: 8px;
+        margin-bottom: 12px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 22px;
+      }
+      .sub {
+        color: #6b6889;
+      }
+      .banner {
+        background: #fff3d9;
+        color: #9a5b00;
+        border-radius: 8px;
+        padding: 6px 10px;
+        margin-bottom: 12px;
+        font-weight: 600;
+      }
+      .details {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px 14px;
+        background: #f6f4ff;
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 14px;
+      }
+      .details b {
+        display: block;
+        color: #6b6889;
+        font-weight: 500;
+        font-size: 11px;
+      }
+      .cols {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 14px;
+      }
+      caption {
+        text-align: start;
+        font-weight: 800;
+        font-size: 14px;
+        padding: 4px 0;
+      }
+      th,
+      td {
+        border-bottom: 1px solid #e7e3f6;
+        padding: 5px 6px;
+        text-align: start;
+      }
+      th {
+        background: #efeaff;
+        font-weight: 600;
+      }
+      td.n,
+      th.n {
+        text-align: left;
+        direction: ltr;
+        font-variant-numeric: tabular-nums;
+      }
+      tr.total td {
+        font-weight: 800;
+        border-top: 2px solid #1d1a33;
+      }
+      .net {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #6d4aff;
+        color: #fff;
+        border-radius: 10px;
+        padding: 12px 16px;
+        font-size: 18px;
+        font-weight: 800;
+      }
+      footer {
+        margin-top: 14px;
+        color: #6b6889;
+        font-size: 11px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="watermark">לדוגמה בלבד</div>
+    <header>
+      <div>
+        <h1>תלוש שכר לחודש 09/2026</h1>
+        <div class="sub">חברה לדוגמה בע״מ · תיק ניכויים 900000000</div>
+      </div>
+      <div class="sub">הופק: 30/09/2026</div>
+    </header>
+
+    <div class="banner">מסמך לדוגמה עם נתונים מומצאים, להדגמת קריאת תלוש ביועץ הרכב. זה לא תלוש אמיתי.</div>
+
+    <div class="details">
+      <div><b>שם העובד</b>דנה ישראלי (דמות לדוגמה)</div>
+      <div><b>מחלקה</b>מכירות</div>
+      <div><b>תפקיד</b>מנהלת לקוחות</div>
+      <div><b>תחילת עבודה</b>01/03/2019</div>
+      <div><b>מצב משפחתי</b>נשואה + 1</div>
+      <div><b>נקודות זיכוי</b>2.25</div>
+      <div><b>ברוטו למס הכנסה</b>19,270.00</div>
+      <div><b>ברוטו לביטוח לאומי</b>19,270.00</div>
+    </div>
+
+    <div class="cols">
+      <div>
+        <table>
+          <caption>תשלומים</caption>
+          <thead>
+            <tr>
+              <th>תיאור</th>
+              <th class="n">סכום</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>שכר יסוד</td>
+              <td class="n">14,200.00</td>
+            </tr>
+            <tr>
+              <td>עמלות מכירה</td>
+              <td class="n">1,000.00</td>
+            </tr>
+            <tr class="total">
+              <td>סה״כ תשלומים</td>
+              <td class="n">15,200.00</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table>
+          <caption>זקיפות (לא משולם)</caption>
+          <tbody>
+            <tr>
+              <td>שווי רכב</td>
+              <td class="n">4,070.00</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <table>
+          <caption>ניכויי חובה</caption>
+          <tbody>
+            <tr>
+              <td>מס הכנסה</td>
+              <td class="n">2,535.95</td>
+            </tr>
+            <tr>
+              <td>ביטוח לאומי</td>
+              <td class="n">900.59</td>
+            </tr>
+            <tr>
+              <td>מס בריאות</td>
+              <td class="n">850.33</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table>
+          <caption>ניכויים אחרים</caption>
+          <thead>
+            <tr>
+              <th>תיאור</th>
+              <th class="n">שיעור</th>
+              <th class="n">סכום</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>קרן פנסיה - עובד</td>
+              <td class="n"></td>
+              <td class="n">912.00</td>
+            </tr>
+            <tr>
+              <td>קרן השתלמות - עובד</td>
+              <td class="n">2.5%</td>
+              <td class="n">380.00</td>
+            </tr>
+            <tr>
+              <td>השתתפות ברכב</td>
+              <td class="n"></td>
+              <td class="n">300.00</td>
+            </tr>
+            <tr class="total">
+              <td>סה״כ ניכויים</td>
+              <td class="n"></td>
+              <td class="n">5,878.87</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="net">
+      <span>נטו לתשלום</span>
+      <span dir="ltr">9,321.13 ₪</span>
+    </div>
+
+    <footer>הפרשות מעסיק: פנסיה 6.5%, פיצויים 6%, קרן השתלמות 7.5%. כל הנתונים בתלוש הזה מומצאים.</footer>
+  </body>
+</html>

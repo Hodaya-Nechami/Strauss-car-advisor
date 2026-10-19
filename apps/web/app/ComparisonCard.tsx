@@ -5,7 +5,9 @@ import { useState, type FormEvent } from "react";
 import { CarImage } from "./CarImage";
 import { shekel } from "./cars";
 import { Mascot } from "./Mascot";
-import type { ChatView, ComparisonView, SideInfo, SideView } from "./types";
+import { useCountUp } from "./motion";
+import { NetBridge } from "./NetBridge";
+import type { ChatView, ComparisonView, ReferenceCheck, SideInfo, SideView } from "./types";
 
 const BADGE: Record<ComparisonView["eligibility"]["status"], string> = {
   eligible: "זכאי/ת",
@@ -173,18 +175,58 @@ function Recalculate({ sessionId, today, onView }: { sessionId: string; today: u
   );
 }
 
+/** "מה הכי משתלם לי?": דירוג כל החלופות מול אותו מצב של היום, בלי לחכות לבוט */
+function RankButton({ sessionId, today, onView }: { sessionId: string; today: unknown; onView: (v: ChatView) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function rank() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/rank", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, today }),
+      });
+      const data = (await res.json()) as ChatView & { error?: string };
+      if (!res.ok) setError(data.error ?? "הדירוג נכשל");
+      else onView(data);
+    } catch {
+      setError("אין חיבור לשרת");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rank-cta">
+      <button type="button" className="glow-button" onClick={() => void rank()} disabled={busy}>
+        {busy ? "בודק את כל האפשרויות..." : "🏆 מה הכי משתלם לי מכל האפשרויות?"}
+      </button>
+      {error && <div className="error">{error}</div>}
+    </div>
+  );
+}
+
 export function ComparisonCard({
   data,
   input,
   sessionId,
   onView,
+  reference,
+  showRank = true,
 }: {
   data: ComparisonView;
   input?: { today?: unknown; alternative?: unknown };
   sessionId?: string | null;
   onView?: (v: ChatView) => void;
+  /** בהדגמה: האם התוצאה זהה לנטו הייחוס של המארגנים */
+  reference?: ReferenceCheck;
+  showRank?: boolean;
 }) {
   const { today: t, alternative: a, diffNet, eligibility } = data;
+  const shownDiff = useCountUp(diffNet ?? 0);
   const rows = ROWS.filter((r) => r.always || (t && t[r.key] !== 0) || (a && a[r.key] !== 0));
   const details = DETAIL_ROWS.filter(
     (r) => r.total || (t?.breakdown?.[r.key] ?? 0) !== 0 || (a?.breakdown?.[r.key] ?? 0) !== 0,
@@ -215,15 +257,31 @@ export function ComparisonCard({
             <div className="diff-amount">
               <bdi>
                 {diffNet > 0 ? "+" : diffNet < 0 ? "−" : ""}
-                {shekel(Math.abs(diffNet))}
+                {shekel(Math.abs(shownDiff))}
               </bdi>
             </div>
             <div className="diff-caption">
               {diffNet > 0 ? "יותר בנטו, בכל חודש" : diffNet < 0 ? "פחות בנטו, בכל חודש" : "אותו נטו בדיוק"}
+              {diffNet !== 0 && (
+                <span className="diff-year">
+                  {" "}
+                  · בשנה: <bdi>{(diffNet > 0 ? "+" : "−") + shekel(Math.abs(diffNet * 12))}</bdi>
+                </span>
+              )}
             </div>
           </div>
         </div>
       )}
+
+      {reference && (
+        <div className={`verified${reference.matches ? "" : " off"}`}>
+          {reference.matches
+            ? "✓ זהה עד השקל לחישוב הייחוס של המארגנים"
+            : `שונה מחישוב הייחוס של המארגנים (שם: ${shekel(reference.expected.diff)})`}
+        </div>
+      )}
+
+      {t && a && data.bridge && data.bridge.length > 0 && <NetBridge todayNet={t.net} altNet={a.net} steps={data.bridge} />}
 
       <div className="table-wrap">
         <table className="compare">
@@ -291,6 +349,10 @@ export function ComparisonCard({
             המשפחתי. כל סכום מעוגל לשקל, ולכן סיכום ידני יכול לצאת שונה בשקל אחד. החישוב לפי לוחות 2025.
           </p>
         </details>
+      )}
+
+      {sessionId && input?.today !== undefined && onView && t && showRank && (
+        <RankButton sessionId={sessionId} today={input.today} onView={onView} />
       )}
 
       {sessionId && input?.today !== undefined && onView && (

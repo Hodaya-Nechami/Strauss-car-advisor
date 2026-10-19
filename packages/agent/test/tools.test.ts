@@ -229,3 +229,50 @@ describe("בדיקת קלט ויומן", () => {
     expect(audit.entries.map((e) => e.tool)).toEqual(["list_catalog", "no_such_tool"]);
   });
 });
+
+describe("מה הכי משתלם, ולאן הלך כל שקל", () => {
+  const noa = { group: "ג", occupation: "מנהל/ת מוצר", baseSalary: 18500, commissions: 0, bonus: 0, pensionRate: 6, studyFundRate: 2.5, creditPoints: 2.75 };
+  const today = { kind: "car", car: "COROLLA CROSS", participation: 300 };
+
+  it("השוואה מחזירה את ההפרש מפורק לסיבות, שמסתכמות בדיוק להפרש", async () => {
+    const { call } = makeCtx();
+    await call("save_employee_profile", noa);
+    const r = await call("calculate_comparison", { today, alternative: { kind: "car", car: "ATTO 3", participation: 300 } });
+    expect(r.bridge.map((b: { label: string; amount: number }) => [b.label, b.amount])).toEqual([
+      ["מס על שווי השימוש", 411],
+      ["החזר חשמל", 250],
+    ]);
+  });
+
+  it("דירוג: כל החלופות מהמשתלמת ביותר, עם ההשתתפות הרגילה מהקטלוג", async () => {
+    const { call } = makeCtx();
+    await call("save_employee_profile", noa);
+    const r = await call("rank_alternatives", { today });
+    expect(r.ok).toBe(true);
+    expect(r.today).toMatchObject({ label: "COROLLA CROSS (2025)", net: 11032, side: { kind: "car", carId: "CAR-09" } });
+    const diffs = r.options.map((o: { diffNet: number }) => o.diffNet);
+    expect(diffs).toEqual([...diffs].sort((a: number, b: number) => b - a));
+    expect(r.options[0]).toMatchObject({ kind: "waiver", maintenance: 2000 });
+    expect(r.options.find((o: { model?: string }) => o.model === "ATTO 3")).toMatchObject({
+      carId: "CAR-10",
+      participation: 300,
+      electricRefund: true,
+      diffNet: 661,
+      net: 11693,
+    });
+    expect(r.notes).toEqual(["מספר הילדים לא ידוע, ולכן רכבי מסלול ברוכת ילדים לא בדירוג."]);
+    expect(r.basis).toContain("ההשתתפות הרגילה");
+  });
+
+  it("דירוג בלי נתוני שכר או בלי השתתפות היום: אומר מה חסר", async () => {
+    const { call } = makeCtx();
+    let r = await call("rank_alternatives", { today });
+    expect(r.ok).toBe(false);
+    expect(r.missing).toContain("שכר בסיס חודשי");
+
+    await call("save_employee_profile", noa);
+    r = await call("rank_alternatives", { today: { kind: "car", car: "COROLLA CROSS" } });
+    expect(r.ok).toBe(false);
+    expect(r.missing).toEqual(["ההשתתפות שלך ברכב היום"]);
+  });
+});

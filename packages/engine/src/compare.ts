@@ -1,3 +1,4 @@
+import { netBridge } from "./bridge";
 import { checkEligibility } from "./eligibility";
 import { formatShekel as f } from "./format";
 import { calcNet, isElectricEligible } from "./net";
@@ -106,6 +107,10 @@ export function compare(input: CompareInput): Comparison {
     todayResult && altResult
       ? describeChanges(today, alternative, todayResult.breakdown, altResult.breakdown, rules)
       : [];
+  const bridge =
+    todayResult && altResult
+      ? netBridge(profile, today, alternative, todayResult.breakdown, altResult.breakdown, rules, diffDisplay!)
+      : [];
 
   const explanation: string[] = [];
   if (eligibility.status === "not_eligible") {
@@ -125,5 +130,5 @@ export function compare(input: CompareInput): Comparison {
     explanation.push(changes.length ? `הסיבות: ${changes.join(", ")}.` : "אין שינוי ברכיבי הרכב.");
   }
 
-  return { eligibility, today: todayResult, alternative: altResult, diff, diffDisplay, changes, explanation, missing };
+  return { eligibility, today: todayResult, alternative: altResult, diff, diffDisplay, changes, bridge, explanation, missing };
 }

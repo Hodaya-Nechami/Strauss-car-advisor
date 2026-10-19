@@ -71,6 +71,23 @@ export function WaiverArt() {
   );
 }
 
+/** תמונה קטנה בלי קרדיט ובלי figure, כדי שאפשר יהיה לשים אותה בתוך כפתור */
+export function CarThumb({ carId, kind = "car", size = "small" }: { carId?: string; kind?: "car" | "waiver" | "none"; size?: "small" | "big" }) {
+  const photo = kind === "car" && carId ? carImages[carId] : undefined;
+  return (
+    <span className={`thumb ${size}${photo ? "" : " illustration"}`} aria-hidden="true">
+      {kind === "waiver" ? (
+        <WaiverArt />
+      ) : photo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={photo.src} alt="" width={photo.width} height={photo.height} loading="lazy" />
+      ) : (
+        <CarIllustration body={carId ? BODY_TYPES[carId] : "hatch"} color={carColor(carId)} />
+      )}
+    </span>
+  );
+}
+
 export function CarImage({
   carId,
   label,

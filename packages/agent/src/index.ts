@@ -8,3 +8,4 @@ export * from "./claude";
 export * from "./schemas";
 export * from "./free";
 export * from "./agent";
+export * from "./payslip";

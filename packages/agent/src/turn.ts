@@ -8,6 +8,9 @@ export interface ComparisonRecord {
   result: Record<string, unknown>;
 }
 
+/** דירוג כל החלופות שחושב בתור הזה. המסך מציג אותו כגרף "מה הכי משתלם לי". */
+export type RankingRecord = ComparisonRecord;
+
 /** רכבים שהבוט ביקש להציג בתמונות בתור הזה */
 export interface CarGroup {
   purpose: "options" | "current" | "interest";
@@ -19,6 +22,7 @@ export interface TurnResult {
   reply: string;
   status: "done" | "refused" | "truncated" | "too_many_steps";
   comparisons: ComparisonRecord[];
+  rankings: RankingRecord[];
   /** רכבים להצגה בתמונות */
   carGroups: CarGroup[];
   /** שאלות שנשלחו לנציג בתור הזה */
@@ -39,6 +43,7 @@ const REPLIES = {
 export class TurnCollector {
   private texts: string[] = [];
   private comparisons: ComparisonRecord[] = [];
+  private rankings: RankingRecord[] = [];
   private carGroups: CarGroup[] = [];
   private repQuestions: RepQuestionRecord[] = [];
   private via: string[] = [];
@@ -55,11 +60,14 @@ export class TurnCollector {
     if (t) this.texts.push(t);
   }
 
-  /** מריץ כלי ושומר את מה שהמסך צריך: תוצאות השוואה ושאלות לנציג */
+  /** מריץ כלי ושומר את מה שהמסך צריך: השוואות, דירוגים, תמונות ושאלות לנציג */
   async runTool(name: string, input: unknown): Promise<Record<string, unknown>> {
     const output = await runTool(name, input, this.ctx);
     if (name === "calculate_comparison" && output.ok === true) {
       this.comparisons.push({ input, result: output });
+    }
+    if (name === "rank_alternatives" && output.ok === true) {
+      this.rankings.push({ input, result: output });
     }
     if (name === "show_cars" && output.ok === true) {
       this.carGroups.push({ purpose: output.purpose as CarGroup["purpose"], cars: output.shown as Record<string, unknown>[] });
@@ -78,6 +86,7 @@ export class TurnCollector {
       reply,
       status,
       comparisons: this.comparisons,
+      rankings: this.rankings,
       carGroups: this.carGroups,
       repQuestions: this.repQuestions,
       openQuestions: [...this.ctx.session.pendingQuestions],

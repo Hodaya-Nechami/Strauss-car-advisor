@@ -10,6 +10,7 @@ import {
   checkEligibility,
   compare,
   findCatalogCar,
+  rankAlternatives,
   type CatalogCar,
   type Comparison,
   type NetBreakdown,
@@ -130,6 +131,8 @@ function presentComparison(c: Comparison, rules: Rules, today: Situation, altern
     alternative: c.alternative ? { label: c.alternative.label, ...display(c.alternative.breakdown, rules) } : null,
     diffNet: c.diffDisplay,
     changes: c.changes,
+    /** ההפרש מפורק לסיבות. הסכומים מסתכמים בדיוק ל-diffNet. */
+    bridge: c.bridge.map((b) => ({ kind: b.kind, label: b.label, detail: b.detail, amount: b.display })),
     explanation: c.explanation,
     missing: c.missing,
   };
@@ -288,6 +291,54 @@ export const tools = {
       const profile = completeProfile(ctx.session.profile)!;
       const c = compare({ profile, today, alternative, occupations: ctx.occupations, rules: ctx.rules });
       return { ok: true, ...presentComparison(c, ctx.rules, today, alternative) };
+    },
+  }),
+
+  rank_alternatives: def({
+    description:
+      "מדרג את כל החלופות שהעובד זכאי להן לפי הנטו שיישאר לו בכל חודש: כל רכב מהקטלוג שמגיע לו, וגם ויתור על הרכב אם העיסוק מאפשר. " +
+      "כל רכב מחושב עם ההשתתפות הרגילה שלו בקטלוג. מפעילים כשהעובד שואל מה הכי משתלם לו, מתלבט בין כמה רכבים, או רוצה לראות את כל האפשרויות. " +
+      "המסך מציג לעובד את הדירוג המלא בגרף, ולכן בטקסט מציינים רק את 2-3 החלופות המובילות.",
+    schema: z.object({ today: situationSchema }),
+    run: async (input, ctx) => {
+      const missingProfile = missingProfileFields(ctx.session.profile);
+      if (missingProfile.length) return { ok: false, missing: missingProfile, message: "חסרים נתוני שכר לחישוב" };
+      const today = resolveSituation(input.today, ctx.catalog);
+      if ("error" in today) return { ok: false, error: today.error };
+      const profile = completeProfile(ctx.session.profile)!;
+      const k = rankAlternatives({ profile, today, catalog: ctx.catalog, occupations: ctx.occupations, rules: ctx.rules });
+      if (k.blockedReason) return { ok: false, error: k.blockedReason, missing: k.missing };
+      if (!k.today) return { ok: false, missing: k.missing, message: "חסר מידע על המצב היום" };
+
+      const notes: string[] = [];
+      if (ctx.session.profile.childrenUnder23 === undefined) {
+        notes.push("מספר הילדים לא ידוע, ולכן רכבי מסלול ברוכת ילדים לא בדירוג.");
+      }
+      if (k.waiver && k.waiver.status !== "eligible") notes.push(`ויתור על הרכב: ${k.waiver.reason}.`);
+      return {
+        ok: true,
+        today: { label: k.today.label, net: Math.round(k.today.breakdown.net), side: sideInfo(today) },
+        options: k.options.map((o) => {
+          const b = o.comparison.alternative!.breakdown;
+          return {
+            kind: o.alternative.kind,
+            carId: o.car?.id,
+            label: o.comparison.alternative!.label,
+            model: o.car?.model,
+            manufacturer: o.car?.manufacturer,
+            group: o.car?.group,
+            drive: o.car?.drive,
+            participation: o.alternative.kind === "car" ? o.alternative.participation : undefined,
+            maintenance: o.alternative.kind === "waiver" ? Math.round(b.maintenance) : undefined,
+            electricRefund: b.electricGross > 0,
+            net: Math.round(b.net),
+            diffNet: o.comparison.diffDisplay,
+          };
+        }),
+        waiver: k.waiver ? { status: k.waiver.status, reason: k.waiver.reason } : null,
+        notes,
+        basis: "כל רכב חושב עם ההשתתפות הרגילה שלו בקטלוג. ההשתתפות הסופית נקבעת מול נציג התחבורה.",
+      };
     },
   }),
 

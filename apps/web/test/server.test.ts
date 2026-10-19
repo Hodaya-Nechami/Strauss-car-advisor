@@ -85,3 +85,61 @@ describe("פעולות מסך בלי הבוט", () => {
     await expect(server.getOptions("no-such-chat")).rejects.toMatchObject({ status: 404 });
   });
 });
+
+describe("מה הכי משתלם, ומצב הדגמה", () => {
+  it("דירוג מהמסך: נוסף לשיחה, והבוט שומע מה החלופה המובילה", async () => {
+    const id = server.createChat().sessionId!;
+    await server.updateProfile(id, profile);
+    const v = await server.rankFromScreen(id, { kind: "car", car: "COROLLA CROSS", participation: 300 });
+
+    const entry = v.transcript.at(-1)!;
+    expect(entry.role).toBe("calc");
+    const result = entry.rankings![0]!.result as any;
+    expect(result.options[0]).toMatchObject({ kind: "waiver", diffNet: 3199 });
+    expect(sessionMessages(id).at(-1)!.content).toContain("המובילה: ויתור");
+  });
+
+  it("כל 6 העובדים לדוגמה זהים עכשיו לנטו הייחוס של המארגנים", async () => {
+    const d = await server.getDemo();
+    expect(d.verified).toEqual({ matched: 6, total: 6 });
+    expect(d.personas.map((p) => p.name)).toContain("נועה לוי");
+    expect(d.personas.find((p) => p.id === "E-003")!.today.kind).toBe("waiver");
+  });
+
+  it("הדגמה: שאלת העובד מחושבת מיד, עם בדיקה מול הייחוס ועם דירוג", async () => {
+    const v = await server.startDemo("E-001");
+    expect(v.profile).toMatchObject({ group: "ג", baseSalary: 18500, childrenUnder23: 2 });
+    expect(v.transcript.map((t) => t.role)).toEqual(["notice", "employee", "calc"]);
+
+    const calc = v.transcript[2]!;
+    expect((calc.comparisons![0]!.result as any).diffNet).toBe(661);
+    expect(calc.comparisons![0]!.reference).toMatchObject({ matches: true, expected: { diff: 661 } });
+    expect((calc.rankings![0]!.result as any).options.length).toBeGreaterThan(5);
+    expect(sessionMessages(v.sessionId!).at(-1)!.content).toContain("[הדגמה מהמסך");
+  });
+
+  it("עובד לדוגמה שלא קיים מחזיר 404", async () => {
+    await expect(server.startDemo("E-999")).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("תלוש שכר", () => {
+  it("נתונים מתלוש שאושרו נשמרים גם בלי שיחה קיימת, והבוט יודע מה כבר ידוע", async () => {
+    const v = await server.updateProfile(
+      null,
+      { baseSalary: 14200, commissions: 1000, bonus: 0, pensionRate: 6, studyFundRate: 2.5, creditPoints: 2.25 },
+      { carParticipation: 300, carValueOfUse: 4070 },
+    );
+    expect(v.sessionId).toBeTruthy();
+    expect(v.profile).toMatchObject({ baseSalary: 14200, pensionRate: 6 });
+    expect(v.transcript.at(-1)!.text).toContain("הנתונים מהתלוש נשמרו");
+    const last = sessionMessages(v.sessionId!).at(-1)!.content;
+    expect(last).toContain("העלה תלוש שכר ואישר");
+    expect(last).toContain("ההשתתפות שלו ברכב היום: 300 ₪");
+    expect(last).toContain("קבוצת הזכאות");
+  });
+
+  it("קובץ שאינו PDF או תמונה נדחה לפני שליחה לספק", async () => {
+    await expect(server.readPayslip(new Uint8Array([1, 2, 3]), "text/plain")).rejects.toMatchObject({ status: 415 });
+  });
+});

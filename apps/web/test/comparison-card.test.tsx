@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 import type { CatalogCar, Occupation, Rules } from "@strauss/engine";
 import { CatalogDataSource, MemoryRepQueue, newSession, runTool, type ToolContext } from "@strauss/agent";
 import { ComparisonCard } from "../app/ComparisonCard";
-import type { ComparisonView } from "../app/types";
+import { PayslipCard } from "../app/Payslip";
+import { RankingCard } from "../app/RankingCard";
+import type { ComparisonView, PayslipReading, RankingView } from "../app/types";
 
 const configDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "config");
 const load = <T,>(n: string): T => JSON.parse(readFileSync(join(configDir, n), "utf-8")) as T;
@@ -69,5 +71,94 @@ describe("כרטיס ההשוואה מציג בדיוק את מספרי המנו
     expect(text).toContain("גבוהה מהקבוצה שלך");
     expect(text).toContain("נטו בחודש 11,032 ₪ —");
     expect(text).not.toContain("בחודש בנטו");
+  });
+});
+
+describe("לאן הלך כל שקל, ומה הכי משתלם", () => {
+  const noa = { group: "ג", occupation: "מנהל/ת מוצר", baseSalary: 18500, commissions: 0, bonus: 0, pensionRate: 6, studyFundRate: 2.5, creditPoints: 2.75 };
+
+  it("תרשים המפל מציג כל סיבה עם הסכום שלה, מהנטו של היום לנטו בחלופה", async () => {
+    const data = await compareVia(noa, { kind: "car", car: "COROLLA CROSS", participation: 300 }, { kind: "car", car: "ATTO 3", participation: 300 });
+    const text = visibleText(renderToStaticMarkup(<ComparisonCard data={data} />));
+    expect(text).toContain("לאן הלך כל שקל");
+    expect(text).toContain("נטו היום: 11,032 ₪ מס על שווי השימוש: +411 ₪ (שווי שימוש 4,070 → 3,130 ₪) החזר חשמל: +250 ₪");
+    expect(text).toContain("+661 נטו בחלופה 11,693");
+  });
+
+  it("בהדגמה מוצג אישור שהתוצאה זהה לחישוב של המארגנים", async () => {
+    const data = await compareVia(noa, { kind: "car", car: "COROLLA CROSS", participation: 300 }, { kind: "car", car: "ATTO 3", participation: 300 });
+    const html = renderToStaticMarkup(
+      <ComparisonCard data={data} reference={{ matches: true, expected: { netToday: 11032, netAlternative: 11693, diff: 661 } }} />,
+    );
+    expect(visibleText(html)).toContain("זהה עד השקל לחישוב הייחוס של המארגנים");
+  });
+
+  it("דירוג: המובילה בראש, קו היום מפריד בין רווח להפסד", async () => {
+    const ctx: ToolContext = {
+      session: newSession("R"),
+      rules: load<Rules>("rules.json"),
+      catalog,
+      occupations: load<Occupation[]>("occupations.json"),
+      data: new CatalogDataSource(catalog),
+      rep: new MemoryRepQueue(),
+    };
+    await runTool("save_employee_profile", noa, ctx);
+    const data = (await runTool("rank_alternatives", { today: { kind: "car", car: "COROLLA CROSS", participation: 300 } }, ctx)) as unknown as RankingView;
+    const html = renderToStaticMarkup(<RankingCard data={data} />);
+    const text = visibleText(html);
+
+    expect(text).toMatch(/👑 הכי משתלם לך (₪ )?ויתור על הרכב אחזקת רכב 2,000 ₪ בחודש \+3,199 ₪/);
+    expect(text).toContain("+3,199 ₪");
+    expect(text).toContain("+38,388 ₪ בשנה");
+    expect(text).toMatch(/לעומת היום \( ?COROLLA CROSS \(2025\) ?, 11,032 ₪ נטו\)/);
+    // מוצגות 6 הראשונות, כולן משתלמות יותר מהיום, ולכן קו היום עוד מוסתר
+    expect(text).toContain("להציג את כל 13 האפשרויות");
+    expect(html).not.toContain("rank-baseline");
+  });
+
+  it("דירוג עם חלופות שמשתלמות פחות: קו היום מפריד ביניהן", async () => {
+    const data: RankingView = {
+      today: { label: "NIRO (2025)", net: 10000, side: { kind: "car", carId: "CAR-05" } },
+      options: [
+        { kind: "car", carId: "CAR-06", label: "MG4 (2025)", model: "MG4", group: "ב", drive: "חשמלי", participation: 250, electricRefund: true, net: 10300, diffNet: 300 },
+        { kind: "car", carId: "CAR-07", label: "COROLLA (2026)", model: "COROLLA", group: "ב", drive: "בנזין", participation: 250, electricRefund: false, net: 9800, diffNet: -200 },
+      ],
+      waiver: null,
+      notes: [],
+      basis: "",
+    };
+    const html = renderToStaticMarkup(<RankingCard data={data} />);
+    const at = (s: string) => html.indexOf(s);
+    expect(at("+300")).toBeLessThan(at("rank-baseline"));
+    expect(at("rank-baseline")).toBeLessThan(at("−200"));
+  });
+});
+
+describe("קריאת תלוש: כרטיס האישור", () => {
+  it("מציג כל ערך עם המקור שלו, ומסמן מה חושב ומה לא נמצא", () => {
+    const reading: PayslipReading = {
+      period: "09/2026",
+      fields: {
+        baseSalary: { value: 14200, source: 'בתלוש: "שכר יסוד"' },
+        bonus: { value: 0, source: "לא מופיע בתלוש", assumedZero: true },
+        pensionRate: { value: 6, source: "חושב: 912 ₪ מתוך שכר של 15,200 ₪" },
+      },
+      car: { participation: { value: 300, source: 'בתלוש: "השתתפות ברכב"' } },
+      notes: ["לא מצאתי בתלוש נקודות זיכוי."],
+      via: "OpenRouter",
+    };
+    const noop = () => undefined;
+    const html = renderToStaticMarkup(
+      <PayslipCard slip={{ phase: "review", reading }} sessionId={null} onView={noop} onSaved={noop} onDone={noop} onSample={noop} />,
+    );
+    const text = visibleText(html);
+    expect(text).toContain("זה מה שקראתי מהתלוש (09/2026)");
+    expect(text).toContain("✓ חושב: 912 ₪ מתוך שכר של 15,200 ₪");
+    expect(text).toContain("⚪ לא מופיע בתלוש");
+    expect(text).toContain("⚠️ לא מצאתי בתלוש");
+    expect(text).toContain("ההשתתפות שלי ברכב היום היא");
+    expect(text).toContain("לא מצאתי בתלוש נקודות זיכוי.");
+    expect(text).toContain("נקרא בעזרת OpenRouter");
+    expect(html).toContain('value="14200"');
   });
 });

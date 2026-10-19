@@ -112,6 +112,11 @@ export function grossUpElectric(profile: EmployeeProfile, situation: Situation, 
   return (lo + hi) / 2;
 }
 
+/** נטו בלי החזר החשמל, כדי לדעת כמה מהנטו מגיע מההחזר */
+export function netWithoutElectric(profile: EmployeeProfile, situation: Situation, rules: Rules): NetBreakdown {
+  return calcNetWith(profile, situation, rules, { electricGross: 0 });
+}
+
 /** חישוב נטו חודשי מלא למצב אחד (היום או חלופה) */
 export function calcNet(profile: EmployeeProfile, situation: Situation, rules: Rules): NetBreakdown {
   const electricGross = isElectricEligible(situation, rules) ? grossUpElectric(profile, situation, rules) : 0;

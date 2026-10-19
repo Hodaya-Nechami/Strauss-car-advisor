@@ -16,6 +16,12 @@ import {
   appendUserNote,
   createAgentOptionsFromEnv,
   describeAgentError,
+  NotAPayslipError,
+  PayslipReadError,
+  PAYSLIP_MAX_BYTES,
+  PAYSLIP_MIME_TYPES,
+  payslipReaderFromEnv,
+  type PayslipReading,
   resolveMode,
   newSession,
   resumeWithRepAnswer,
@@ -23,16 +29,31 @@ import {
   runTurn,
   type AgentOptions,
   type ComparisonRecord,
+  type RankingRecord,
   type SessionState,
   type ToolContext,
   type TurnResult,
 } from "@strauss/agent";
+import {
+  checkAgainstReference,
+  demoScenarios,
+  personaCard,
+  type DemoScenario,
+  type ReferenceCheck,
+  type ReferenceResult,
+  type SampleEmployee,
+} from "./demo";
+
+/** השוואה במסך. בהדגמה מצורפת גם הבדיקה מול נטו הייחוס של המארגנים. */
+export type ScreenComparison = ComparisonRecord & { reference?: ReferenceCheck };
 
 export interface TranscriptEntry {
-  /** employee: העובד כתב · bot: הבוט ענה · notice: הודעת מצב · calc: חישוב מחדש מהמסך, בלי הבוט */
+  /** employee: העובד כתב · bot: הבוט ענה · notice: הודעת מצב · calc: חישוב מהמסך, בלי הבוט */
   role: "employee" | "bot" | "notice" | "calc";
   text: string;
-  comparisons?: ComparisonRecord[];
+  comparisons?: ScreenComparison[];
+  /** דירוג כל החלופות, לגרף "מה הכי משתלם לי" */
+  rankings?: RankingRecord[];
   /** רכבים להצגה בתמונות */
   cars?: CarGroup[];
   /** אילו מודלים ענו, למשל ["Gemini"] או ["Gemini", "Groq"] */
@@ -75,13 +96,14 @@ interface ServerState {
   rep: MemoryRepQueue;
   chats: Map<string, StoredChat>;
   agent?: AgentOptions;
+  demo?: DemoScenario[];
 }
 
 /**
  * מצב אחד לכל תהליך שרת. נשמר על globalThis כדי לשרוד טעינה מחדש של קוד בזמן פיתוח.
  * כשמבנה השיחות משתנה, מעלים את הגרסה במפתח: השרת מתחיל מזיכרון נקי במקום לקרוס על שיחות במבנה ישן.
  */
-export const STATE_KEY = "__straussState_v4";
+export const STATE_KEY = "__straussState_v5";
 
 function state(): ServerState {
   const g = globalThis as unknown as Record<string, ServerState | undefined>;
@@ -194,8 +216,20 @@ export async function sendMessage(sessionId: string | null, text: string): Promi
     chat.transcript.push({ role: "employee", text, at: now() });
     return runTurn(context(s, chat), text, options);
   });
-  chat.transcript.push({ role: "bot", text: result.reply, comparisons: result.comparisons, cars: result.carGroups, via: result.via, at: now() });
+  chat.transcript.push(botEntry(result));
   return view(chat);
+}
+
+function botEntry(result: TurnResult): TranscriptEntry {
+  return {
+    role: "bot",
+    text: result.reply,
+    comparisons: result.comparisons,
+    rankings: result.rankings,
+    cars: result.carGroups,
+    via: result.via,
+    at: now(),
+  };
 }
 
 /** הרכבים שהעובד יכול לבחור, והאם מותר לו לוותר על הרכב. בלי מודל שפה. */
@@ -234,6 +268,103 @@ export async function recalculate(sessionId: string, today: unknown, alternative
   return view(chat);
 }
 
+/** דירוג כל החלופות מהמסך, בלי הבוט. הבוט מקבל הודעה עם החלופה המובילה. */
+export async function rankFromScreen(sessionId: string, today: unknown): Promise<ChatView> {
+  const s = state();
+  const chat = findChat(sessionId);
+  await withLock(chat, async () => {
+    const result = await runTool("rank_alternatives", { today }, context(s, chat));
+    if (result.ok !== true) throw new ChatError(400, toolProblem(result));
+    const best = (result.options as { label: string; diffNet: number }[])[0];
+    note(
+      chat,
+      `[בדיקה מטבלת ההשוואה, לא בצ'אט] העובד ביקש לראות את כל החלופות שלו, מדורגות לפי הנטו. ` +
+        (best ? `המובילה: ${best.label}, הפרש ${best.diffNet} ₪ בחודש.` : "אין חלופות שאפשר לחשב."),
+    );
+    chat.transcript.push({ role: "calc", text: "כל האפשרויות שלך, מהמשתלמת ביותר", rankings: [{ input: { today }, result }], at: now() });
+  });
+  return view(chat);
+}
+
+function scenarios(s: ServerState): DemoScenario[] {
+  s.demo ??= demoScenarios(
+    loadJson<SampleEmployee[]>("sample-employees.json"),
+    loadJson<ReferenceResult[]>("reference-results.json"),
+    s.catalog,
+  );
+  return s.demo;
+}
+
+/** הקשר זמני לחישוב בלי שיחה, באותם כלים */
+function scratchContext(s: ServerState): ToolContext {
+  return { session: newSession(randomUUID()), rules: s.rules, catalog: s.catalog, occupations: s.occupations, data: s.data, rep: s.rep };
+}
+
+/**
+ * העובדים לדוגמה למסך הפתיחה, ובדיקה חיה: כל אחד מחושב עכשיו ונבדק מול נטו הייחוס של המארגנים.
+ */
+export async function getDemo() {
+  const s = state();
+  const all = scenarios(s);
+  let matched = 0;
+  for (const sc of all) {
+    const ctx = scratchContext(s);
+    await runTool("save_employee_profile", sc.profile, ctx);
+    const result = await runTool("calculate_comparison", { today: sc.today, alternative: sc.alternative }, ctx);
+    if (result.ok === true && checkAgainstReference(result, sc.reference).matches) matched++;
+  }
+  return { personas: all.map((sc) => personaCard(sc, s.catalog)), verified: { matched, total: all.length } };
+}
+
+/**
+ * מתחיל שיחה עם עובד לדוגמה: הנתונים נשמרים, והשאלה שלו מחושבת מיד, בלי לחכות למודל שפה.
+ * הבוט מקבל הודעה עם כל מה שהוצג, כדי שהשיחה תוכל להמשיך מכאן.
+ */
+export async function startDemo(personaId: string): Promise<ChatView> {
+  const s = state();
+  const sc = scenarios(s).find((x) => x.employee.id === personaId);
+  if (!sc) throw new ChatError(404, "העובד לדוגמה לא נמצא");
+  const chat = findChat(createChat().sessionId!);
+  const e = sc.employee;
+  await withLock(chat, async () => {
+    const ctx = context(s, chat);
+    const saved = await runTool("save_employee_profile", sc.profile, ctx);
+    if (saved.ok !== true) throw new ChatError(400, toolProblem(saved));
+    const comparison = await runTool("calculate_comparison", { today: sc.today, alternative: sc.alternative }, ctx);
+    if (comparison.ok !== true) throw new ChatError(400, toolProblem(comparison));
+    const ranking = await runTool("rank_alternatives", { today: sc.today }, ctx);
+    const reference = checkAgainstReference(comparison, sc.reference);
+
+    chat.transcript.push(
+      { role: "notice", text: `🎬 הדגמה: ${e.name}, ${e.occupation}, קבוצה ${e.group}`, at: now() },
+      { role: "employee", text: e.question, at: now() },
+      {
+        role: "calc",
+        text: `חישוב מיידי לפי הנתונים של ${e.name}`,
+        comparisons: [{ input: { today: sc.today, alternative: sc.alternative }, result: comparison, reference }],
+        rankings: ranking.ok === true ? [{ input: { today: sc.today }, result: ranking }] : [],
+        at: now(),
+      },
+    );
+
+    const t = comparison.today as { label: string; net: number };
+    const a = comparison.alternative as { label: string; net: number } | null;
+    const best = ranking.ok === true ? (ranking.options as { label: string; diffNet: number }[])[0] : undefined;
+    note(
+      chat,
+      `[הדגמה מהמסך, לא בצ'אט] נבחר העובד לדוגמה "${e.name}" (${e.occupation}) מהקובץ של המארגנים. ` +
+        `הנתונים שלו כבר נשמרו. המצב היום: ${t.label}${sc.today.kind === "car" ? `, השתתפות ${sc.today.participation} ₪` : ""}. ` +
+        `השאלה שלו: "${e.question}". ` +
+        (a
+          ? `המסך כבר הציג את ההשוואה: נטו היום ${t.net} ₪, עם ${a.label} ${a.net} ₪, הפרש ${comparison.diffNet} ₪ בחודש (ההשתתפות ברכב החדש לפי ההשתתפות הרגילה בקטלוג). `
+          : "") +
+        (best ? `המסך הציג גם דירוג של כל החלופות. המובילה: ${best.label}, הפרש ${best.diffNet} ₪. ` : "") +
+        "אם העובד ממשיך לשאול, המשך מכאן.",
+    );
+  });
+  return view(chat);
+}
+
 const PROFILE_LABELS: Record<string, string> = {
   group: "קבוצת זכאות",
   occupation: "עיסוק",
@@ -246,10 +377,25 @@ const PROFILE_LABELS: Record<string, string> = {
   childrenUnder23: "ילדים עד גיל 23",
 };
 
-/** תיקון נתונים מהטופס. נבדק באותו כלי שהבוט משתמש בו, והבוט מקבל הודעה על השינוי. */
-export async function updateProfile(sessionId: string, patch: Record<string, unknown>): Promise<ChatView> {
+/** מה העובד אישר מתוך תלוש שכר, מעבר לנתוני השכר */
+export interface PayslipConfirmation {
+  /** ההשתתפות שלו ברכב היום, כמו שמופיעה בתלוש ואושרה */
+  carParticipation?: number;
+  /** שווי השימוש של הרכב היום, כמו שמופיע בתלוש */
+  carValueOfUse?: number;
+}
+
+/**
+ * תיקון נתונים מהטופס או מתלוש שאושר. נבדק באותו כלי שהבוט משתמש בו, והבוט מקבל הודעה על השינוי.
+ * בלי מזהה שיחה נפתחת שיחה חדשה, למשל כשמעלים תלוש לפני ההודעה הראשונה.
+ */
+export async function updateProfile(
+  sessionId: string | null,
+  patch: Record<string, unknown>,
+  payslip?: PayslipConfirmation,
+): Promise<ChatView> {
   const s = state();
-  const chat = findChat(sessionId);
+  const chat = findChat(sessionId ?? createChat().sessionId!);
   await withLock(chat, async () => {
     const result = await runTool("save_employee_profile", patch, context(s, chat));
     if (result.ok !== true) throw new ChatError(400, toolProblem(result));
@@ -257,10 +403,49 @@ export async function updateProfile(sessionId: string, patch: Record<string, unk
       .filter(([, v]) => v !== undefined)
       .map(([k, v]) => `${PROFILE_LABELS[k] ?? k}: ${String(v)}`)
       .join(", ");
-    note(chat, `[עדכון מטופס הנתונים, לא בצ'אט] העובד עדכן את הנתונים שלו: ${changed}. הנתונים כבר נשמרו.`);
-    chat.transcript.push({ role: "notice", text: "הנתונים עודכנו", at: now() });
+    if (payslip) {
+      const car = [
+        payslip.carParticipation !== undefined ? `ההשתתפות שלו ברכב היום: ${payslip.carParticipation} ₪` : "",
+        payslip.carValueOfUse !== undefined ? `שווי השימוש של הרכב היום לפי התלוש: ${payslip.carValueOfUse} ₪` : "",
+      ].filter(Boolean);
+      note(
+        chat,
+        `[עדכון מטופס הנתונים, לא בצ'אט] העובד העלה תלוש שכר ואישר את הנתונים שנקראו ממנו: ${changed}. ` +
+          (car.length ? `הוא אישר גם: ${car.join("; ")}. ` : "") +
+          "הנתונים כבר נשמרו, ואין צורך לשאול עליהם שוב. עדיין צריך לברר מה שלא מופיע בתלוש, למשל קבוצת הזכאות ואיזה רכב יש לו היום.",
+      );
+      chat.transcript.push({ role: "notice", text: "📄 הנתונים מהתלוש נשמרו. התלוש עצמו לא נשמר.", at: now() });
+    } else {
+      note(chat, `[עדכון מטופס הנתונים, לא בצ'אט] העובד עדכן את הנתונים שלו: ${changed}. הנתונים כבר נשמרו.`);
+      chat.transcript.push({ role: "notice", text: "הנתונים עודכנו", at: now() });
+    }
   });
   return view(chat);
+}
+
+/**
+ * קורא תלוש שכר ומחזיר את מה שנקרא, לאישור העובד. לא שומר כלום: לא את התלוש ולא את הנתונים.
+ */
+export async function readPayslip(data: Uint8Array, mimeType: string): Promise<PayslipReading> {
+  if (!(PAYSLIP_MIME_TYPES as readonly string[]).includes(mimeType)) {
+    throw new ChatError(415, "אפשר להעלות תלוש כקובץ PDF או כתמונה (JPG או PNG).");
+  }
+  if (data.byteLength > PAYSLIP_MAX_BYTES) throw new ChatError(413, "הקובץ גדול מדי. אפשר להעלות קובץ עד 8MB.");
+  const read = payslipReaderFromEnv(process.env);
+  if (!read) {
+    throw new ChatError(
+      503,
+      "קריאת תלוש צריכה מפתח של Gemini או של OpenRouter בקובץ apps/web/.env. בינתיים אפשר לכתוב את הנתונים בצ'אט.",
+    );
+  }
+  try {
+    return await read({ data: Buffer.from(data).toString("base64"), mimeType });
+  } catch (err) {
+    if (err instanceof NotAPayslipError) throw new ChatError(422, err.message);
+    if (err instanceof PayslipReadError) throw new ChatError(503, err.message);
+    console.error("[payslip] read failed:", err instanceof Error ? err.message.slice(0, 300) : "unknown");
+    throw new ChatError(500, "לא הצלחתי לקרוא את התלוש. נסו שוב, או כתבו את הנתונים בצ'אט.");
+  }
 }
 
 /** בשביל מסך הנציג: כל השאלות הפתוחות מכל השיחות */
@@ -279,6 +464,6 @@ export async function answerRepQuestion(sessionId: string, ticketId: string, ans
     chat.transcript.push({ role: "notice", text: `הנציג ענה: ${answer}`, at: now() });
     return resumeWithRepAnswer(context(s, chat), ticketId, answer, options);
   });
-  chat.transcript.push({ role: "bot", text: result.reply, comparisons: result.comparisons, cars: result.carGroups, via: result.via, at: now() });
+  chat.transcript.push(botEntry(result));
   return view(chat);
 }

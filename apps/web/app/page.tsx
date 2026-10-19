@@ -3,14 +3,18 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { CarGallery } from "./CarGallery";
 import { ComparisonCard } from "./ComparisonCard";
+import { DemoPicker } from "./DemoPicker";
 import { Mascot, type MascotMood } from "./Mascot";
+import { AttachButton, PayslipCard, PayslipDropzone, usePayslip } from "./Payslip";
 import { ProfilePanel } from "./ProfilePanel";
-import type { ChatView, ComparisonRecord, Profile, TranscriptEntry } from "./types";
+import { RankingCard } from "./RankingCard";
+import type { ChatView, Profile, TranscriptEntry } from "./types";
 
 const SESSION_KEY = "strauss-car-advisor-session";
 const POLL_MS = 4000;
 
 const SUGGESTIONS = [
+  { icon: "🏆", text: "מה הכי משתלם לי מכל הרכבים שמגיעים לי?" },
   { icon: "⚡", text: "אני שוקל/ת לעבור לרכב חשמלי. כמה זה ישנה לי בנטו?" },
   { icon: "🔑", text: "אני רוצה לוותר על הרכב ולקבל אחזקה. כמה אקבל?" },
   { icon: "👨‍👩‍👧‍👦", text: "יש לי 5 ילדים. אפשר לקבל רכב משפחתי?" },
@@ -18,6 +22,7 @@ const SUGGESTIONS = [
 
 const FEATURES = [
   { icon: "🎯", text: "חישוב מדויק לשקל" },
+  { icon: "📄", text: "קריאת תלוש שכר" },
   { icon: "🚗", text: "תמונות של כל הרכבים" },
   { icon: "🙋", text: "שאלה לנציג כשצריך" },
 ];
@@ -49,7 +54,7 @@ function renderText(text: string): ReactNode[] {
 
 /** מצב הרוח של נטו ליד כל תשובה: שמח כשהנטו עולה, מודאג כשהוא יורד */
 function moodFor(entry: TranscriptEntry): MascotMood {
-  const last = entry.comparisons?.at(-1)?.result.diffNet;
+  const last = entry.comparisons?.at(-1)?.result.diffNet ?? entry.rankings?.at(-1)?.result.options[0]?.diffNet;
   if (typeof last === "number" && last > 0) return "happy";
   if (typeof last === "number" && last < 0) return "sad";
   return "idle";
@@ -73,6 +78,7 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const payslip = usePayslip();
 
   const applyView = useCallback((v: ChatView) => {
     setSessionId(v.sessionId);
@@ -105,9 +111,10 @@ export default function ChatPage() {
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [transcript.length, sending]);
+  }, [transcript.length, sending, payslip.slip.phase]);
 
-  async function send(text: string) {
+  /** שליחת הודעה לבוט. אפשר לתת מזהה שיחה, כשהיא נפתחה הרגע ועוד לא הגיעה ל-state. */
+  async function send(text: string, session: string | null = sessionId) {
     const message = text.trim();
     if (!message || sending) return;
     setSending(true);
@@ -118,12 +125,12 @@ export default function ChatPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, message }),
+        body: JSON.stringify({ sessionId: session, message }),
       });
       const data = (await res.json()) as ChatView & { error?: string };
       if (!res.ok) {
         setError(data.error ?? "משהו השתבש. נסו שוב.");
-        if (sessionId) await load(sessionId);
+        if (session) await load(session);
         return;
       }
       applyView(data);
@@ -141,12 +148,28 @@ export default function ChatPage() {
     setOpenQuestions([]);
     setProfile({});
     setError(null);
+    payslip.reset();
   }
 
-  const cards = (records: ComparisonRecord[] | undefined) =>
-    records?.map((c, j) => (
-      <ComparisonCard key={j} data={c.result} input={c.input} sessionId={sessionId} onView={applyView} />
-    ));
+  /** כרטיסי ההשוואה והדירוג של הודעה אחת. כשהדירוג כבר מוצג, אין צורך בכפתור שפותח אותו. */
+  const cards = (entry: TranscriptEntry) => (
+    <>
+      {entry.comparisons?.map((c, j) => (
+        <ComparisonCard
+          key={`c${j}`}
+          data={c.result}
+          input={c.input}
+          reference={c.reference}
+          showRank={!entry.rankings?.length}
+          sessionId={sessionId}
+          onView={applyView}
+        />
+      ))}
+      {entry.rankings?.map((r, j) => (
+        <RankingCard key={`r${j}`} data={r.result} input={r.input} sessionId={sessionId} onView={applyView} />
+      ))}
+    </>
+  );
 
   return (
     <div className="app">
@@ -205,6 +228,12 @@ export default function ChatPage() {
               </div>
             </section>
           )}
+          {transcript.length === 0 && payslip.slip.phase === "idle" && (
+            <>
+              <PayslipDropzone onFile={payslip.readFile} onSample={payslip.readSample} />
+              <DemoPicker onView={applyView} />
+            </>
+          )}
 
           {transcript.map((entry, i) => {
             if (entry.role === "employee") {
@@ -229,7 +258,7 @@ export default function ChatPage() {
                   </div>
                   <div className="bot-content">
                     <div className="notice inline">{entry.text}</div>
-                    {cards(entry.comparisons)}
+                    {cards(entry)}
                   </div>
                 </div>
               );
@@ -247,11 +276,20 @@ export default function ChatPage() {
                     </div>
                   )}
                   {entry.cars?.map((g, j) => <CarGallery key={j} group={g} />)}
-                  {cards(entry.comparisons)}
+                  {cards(entry)}
                 </div>
               </div>
             );
           })}
+
+          <PayslipCard
+            slip={payslip.slip}
+            sessionId={sessionId}
+            onView={applyView}
+            onSaved={(v) => void send("📄 העליתי את תלוש השכר שלי. מה עוד צריך כדי לחשב?", v.sessionId)}
+            onDone={payslip.reset}
+            onSample={payslip.readSample}
+          />
 
           {sending && (
             <div className="bot-row">
@@ -313,6 +351,7 @@ export default function ChatPage() {
             }
           }}
         />
+        <AttachButton onFile={payslip.readFile} disabled={sending || payslip.slip.phase === "reading"} />
         <button type="submit" className="send-button" disabled={sending || !input.trim()} aria-label="שליחה">
           <SendIcon />
         </button>
