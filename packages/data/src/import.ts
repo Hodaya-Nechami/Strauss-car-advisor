@@ -8,6 +8,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import iconv from "iconv-lite";
 import Database from "better-sqlite3";
+import { resolveDbPath } from "./paths";
 
 interface Rules {
   valueOfUse: {
@@ -19,7 +20,7 @@ interface Rules {
 const CONFIG_DIR = process.env.CONFIG_DIR ?? resolve(process.cwd(), "..", "..", "config");
 const CSV_PATH =
   process.env.CSV_PATH ?? resolve(process.cwd(), "..", "..", "data", "source", "value-of-use-2026.csv");
-const DB_PATH = process.env.DB_PATH ?? resolve(process.cwd(), ".data", "value-of-use.db");
+const DB_PATH = resolveDbPath();
 const REPORT_PATH = process.env.REPORT_PATH ?? resolve(process.cwd(), ".data", "duplicate-report.json");
 
 // סדר העמודות בקובץ המקור (ראה data/source/value-of-use-2026.csv, שורה 1)
