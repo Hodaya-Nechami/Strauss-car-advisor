@@ -1,14 +1,14 @@
 /**
  * צד השרת של האתר: טעינת ההגדרות, שמירת שיחות והפעלת הבוט.
  *
- * כרגע הכול נשמר בזיכרון של השרת, ונמחק כשהשרת עולה מחדש.
- * נחמי מחליפה את זה במסד נתונים (N6), במאגר רשות המסים (N4) ובטעינת כללים עם ולידציה (N5).
+ * השיחות נשמרות ב-SQLite דרך ChatStore (N6), כולל מנעול שעובד גם בין כמה שרתים.
  * מסך הנציג (N7, N8) משתמש ב-listOpenRepQuestions וב-answerRepQuestion.
  */
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { CatalogCar, EmployeeProfile, Occupation, Rules } from "@strauss/engine";
+import { ChatStore, ChatStoreBusyError, ChatStoreNotFoundError, type ChatRecord } from "@strauss/data";
 import {
   type CarGroup,
   CatalogDataSource,
@@ -30,7 +30,6 @@ import {
   type AgentOptions,
   type ComparisonRecord,
   type RankingRecord,
-  type SessionState,
   type ToolContext,
   type TurnResult,
 } from "@strauss/agent";
@@ -68,11 +67,7 @@ export interface ChatView {
   profile: Partial<EmployeeProfile>;
 }
 
-interface StoredChat {
-  session: SessionState;
-  transcript: TranscriptEntry[];
-  busy: boolean;
-}
+type StoredChat = ChatRecord<TranscriptEntry>;
 
 export class ChatError extends Error {
   constructor(
@@ -94,7 +89,7 @@ interface ServerState {
   occupations: Occupation[];
   data: CatalogDataSource;
   rep: MemoryRepQueue;
-  chats: Map<string, StoredChat>;
+  chats: ChatStore<TranscriptEntry>;
   agent?: AgentOptions;
   demo?: DemoScenario[];
 }
@@ -103,7 +98,7 @@ interface ServerState {
  * מצב אחד לכל תהליך שרת. נשמר על globalThis כדי לשרוד טעינה מחדש של קוד בזמן פיתוח.
  * כשמבנה השיחות משתנה, מעלים את הגרסה במפתח: השרת מתחיל מזיכרון נקי במקום לקרוס על שיחות במבנה ישן.
  */
-export const STATE_KEY = "__straussState_v5";
+export const STATE_KEY = "__straussState_v6";
 
 function state(): ServerState {
   const g = globalThis as unknown as Record<string, ServerState | undefined>;
@@ -115,7 +110,7 @@ function state(): ServerState {
       occupations: loadJson<Occupation[]>("occupations.json"),
       data: new CatalogDataSource(catalog),
       rep: new MemoryRepQueue(),
-      chats: new Map(),
+      chats: new ChatStore<TranscriptEntry>(),
     };
   }
   return g[STATE_KEY]!;
@@ -172,20 +167,19 @@ function findChat(sessionId: string): StoredChat {
 
 /**
  * מריץ פעולה על שיחה, ומונע שתי פעולות בו-זמנית על אותה שיחה.
+ * המנעול חי ב-DB (ChatStore), אז זה עובד גם בין כמה שרתים, לא רק בתוך תהליך אחד.
  * חשוב: אסור להוסיף הודעה להיסטוריה בזמן שהבוט באמצע תור, אחרת ההיסטוריה נשברת.
  */
-async function withLock<T>(chat: StoredChat, action: () => Promise<T>): Promise<T> {
-  if (chat.busy) throw new ChatError(409, "הבוט עדיין עונה על ההודעה הקודמת. רגע אחד.");
-  chat.busy = true;
+async function withLock<T>(sessionId: string, action: (chat: StoredChat) => Promise<T>): Promise<T> {
   try {
-    return await action();
+    return await state().chats.withLock(sessionId, action);
   } catch (err) {
+    if (err instanceof ChatStoreBusyError) throw new ChatError(409, "הבוט עדיין עונה על ההודעה הקודמת. רגע אחד.");
+    if (err instanceof ChatStoreNotFoundError) throw new ChatError(404, "השיחה לא נמצאה. אפשר להתחיל שיחה חדשה.");
     if (err instanceof ChatError) throw err;
     const e = describeAgentError(err);
     console.error("[chat] error:", err);
     throw new ChatError(e.status, e.message);
-  } finally {
-    chat.busy = false;
   }
 }
 
@@ -203,21 +197,21 @@ export function getChatView(sessionId: string | null): ChatView {
 
 /** שיחה חדשה וריקה */
 export function createChat(): ChatView {
-  const chat: StoredChat = { session: newSession(randomUUID()), transcript: [], busy: false };
-  state().chats.set(chat.session.id, chat);
-  return view(chat);
+  const session = newSession(randomUUID());
+  state().chats.create(session);
+  return view({ session, transcript: [] });
 }
 
 export async function sendMessage(sessionId: string | null, text: string): Promise<ChatView> {
   const s = state();
   const options = agentOptions(s);
-  const chat = (sessionId && s.chats.get(sessionId)) || findChat(createChat().sessionId!);
-  const result: TurnResult = await withLock(chat, async () => {
+  const id = sessionId && s.chats.get(sessionId) ? sessionId : createChat().sessionId!;
+  await withLock(id, async (chat) => {
     chat.transcript.push({ role: "employee", text, at: now() });
-    return runTurn(context(s, chat), text, options);
+    const result = await runTurn(context(s, chat), text, options);
+    chat.transcript.push(botEntry(result));
   });
-  chat.transcript.push(botEntry(result));
-  return view(chat);
+  return view(s.chats.get(id));
 }
 
 function botEntry(result: TurnResult): TranscriptEntry {
@@ -252,8 +246,7 @@ export async function getOptions(sessionId: string) {
  */
 export async function recalculate(sessionId: string, today: unknown, alternative: unknown): Promise<ChatView> {
   const s = state();
-  const chat = findChat(sessionId);
-  await withLock(chat, async () => {
+  await withLock(sessionId, async (chat) => {
     const result = await runTool("calculate_comparison", { today, alternative }, context(s, chat));
     if (result.ok !== true) throw new ChatError(400, toolProblem(result));
     const alt = result.alternative as { label: string; net: number } | null;
@@ -265,14 +258,13 @@ export async function recalculate(sessionId: string, today: unknown, alternative
     note(chat, `[בדיקה מטבלת ההשוואה, לא בצ'אט] העובד בדק חלופה: ${JSON.stringify(alternative)}. ${summary}`);
     chat.transcript.push({ role: "calc", text: "בדיקת חלופה מטבלת ההשוואה", comparisons: [{ input: { today, alternative }, result }], at: now() });
   });
-  return view(chat);
+  return view(s.chats.get(sessionId));
 }
 
 /** דירוג כל החלופות מהמסך, בלי הבוט. הבוט מקבל הודעה עם החלופה המובילה. */
 export async function rankFromScreen(sessionId: string, today: unknown): Promise<ChatView> {
   const s = state();
-  const chat = findChat(sessionId);
-  await withLock(chat, async () => {
+  await withLock(sessionId, async (chat) => {
     const result = await runTool("rank_alternatives", { today }, context(s, chat));
     if (result.ok !== true) throw new ChatError(400, toolProblem(result));
     const best = (result.options as { label: string; diffNet: number }[])[0];
@@ -283,7 +275,7 @@ export async function rankFromScreen(sessionId: string, today: unknown): Promise
     );
     chat.transcript.push({ role: "calc", text: "כל האפשרויות שלך, מהמשתלמת ביותר", rankings: [{ input: { today }, result }], at: now() });
   });
-  return view(chat);
+  return view(s.chats.get(sessionId));
 }
 
 function scenarios(s: ServerState): DemoScenario[] {
@@ -324,9 +316,9 @@ export async function startDemo(personaId: string): Promise<ChatView> {
   const s = state();
   const sc = scenarios(s).find((x) => x.employee.id === personaId);
   if (!sc) throw new ChatError(404, "העובד לדוגמה לא נמצא");
-  const chat = findChat(createChat().sessionId!);
+  const id = createChat().sessionId!;
   const e = sc.employee;
-  await withLock(chat, async () => {
+  await withLock(id, async (chat) => {
     const ctx = context(s, chat);
     const saved = await runTool("save_employee_profile", sc.profile, ctx);
     if (saved.ok !== true) throw new ChatError(400, toolProblem(saved));
@@ -362,7 +354,7 @@ export async function startDemo(personaId: string): Promise<ChatView> {
         "אם העובד ממשיך לשאול, המשך מכאן.",
     );
   });
-  return view(chat);
+  return view(s.chats.get(id));
 }
 
 const PROFILE_LABELS: Record<string, string> = {
@@ -395,8 +387,8 @@ export async function updateProfile(
   payslip?: PayslipConfirmation,
 ): Promise<ChatView> {
   const s = state();
-  const chat = findChat(sessionId ?? createChat().sessionId!);
-  await withLock(chat, async () => {
+  const id = sessionId ?? createChat().sessionId!;
+  await withLock(id, async (chat) => {
     const result = await runTool("save_employee_profile", patch, context(s, chat));
     if (result.ok !== true) throw new ChatError(400, toolProblem(result));
     const changed = Object.entries(patch)
@@ -420,7 +412,7 @@ export async function updateProfile(
       chat.transcript.push({ role: "notice", text: "הנתונים עודכנו", at: now() });
     }
   });
-  return view(chat);
+  return view(s.chats.get(id));
 }
 
 /**
@@ -450,20 +442,19 @@ export async function readPayslip(data: Uint8Array, mimeType: string): Promise<P
 
 /** בשביל מסך הנציג: כל השאלות הפתוחות מכל השיחות */
 export function listOpenRepQuestions() {
-  return [...state().chats.values()].flatMap((chat) =>
-    chat.session.pendingQuestions.map((q) => ({ sessionId: chat.session.id, ...q })),
-  );
+  return state()
+    .chats.all()
+    .flatMap((chat) => chat.session.pendingQuestions.map((q) => ({ sessionId: chat.session.id, ...q })));
 }
 
 /** בשביל מסך הנציג: הנציג ענה, והשיחה של העובד ממשיכה מאותה נקודה */
 export async function answerRepQuestion(sessionId: string, ticketId: string, answer: string): Promise<ChatView> {
   const s = state();
   const options = agentOptions(s);
-  const chat = findChat(sessionId);
-  const result = await withLock(chat, async () => {
+  await withLock(sessionId, async (chat) => {
     chat.transcript.push({ role: "notice", text: `הנציג ענה: ${answer}`, at: now() });
-    return resumeWithRepAnswer(context(s, chat), ticketId, answer, options);
+    const result = await resumeWithRepAnswer(context(s, chat), ticketId, answer, options);
+    chat.transcript.push(botEntry(result));
   });
-  chat.transcript.push(botEntry(result));
-  return view(chat);
+  return view(s.chats.get(sessionId));
 }

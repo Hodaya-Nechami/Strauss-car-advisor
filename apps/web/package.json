@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@strauss/agent": "*",
+    "@strauss/data": "*",
     "@strauss/engine": "*",
     "next": "^15.5.28",
     "react": "^19.3.1",
