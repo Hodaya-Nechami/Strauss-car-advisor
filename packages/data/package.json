@@ -1,0 +1,19 @@
+{
+  "name": "@strauss/data",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "import": "tsx src/import.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "iconv-lite": "^0.6.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "tsx": "^4.19.0"
+  }
+}
