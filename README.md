@@ -47,6 +47,25 @@ npm test
 npm run typecheck
 ```
 
+## הפעלה עם Docker
+
+צריך Docker Desktop (או Docker Engine + Compose). לא צריך Node.js מותקן על המחשב.
+
+1. יוצרים את `apps/web/.env` עם המפתחות, בדיוק כמו בהפעלה הרגילה (סעיף קודם).
+2. מרימים:
+   ```
+   docker compose up --build
+   ```
+   ופותחים `http://localhost:3000`.
+
+הנתונים (מאגר שווי השימוש וב-SQLite, ובעתיד גם היסטוריית השיחות) נשמרים ב-volume בשם `strauss_data`,
+ושורדים `docker compose down` ו-`docker compose up` מחדש. למחיקה מלאה: `docker compose down -v`.
+
+כדי לייבא את מאגר שווי השימוש (`data/source/value-of-use-2026.csv`) לתוך אותו volume, בלי Node מותקן מקומית:
+```
+docker compose run --rm data-import
+```
+
 ## מבנה הפרויקט
 
 | תיקייה | מה יש בה | מצב | אחראית |
