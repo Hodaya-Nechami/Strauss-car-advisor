@@ -451,7 +451,8 @@ export function listOpenRepQuestions() {
 
 /** בשביל מסך הנציג: היסטוריית השאלות שכבר נענו, מכל השיחות, החדשות קודם */
 export function listRepHistory() {
-  return [...state().chats.values()]
+  return state()
+    .chats.all()
     .flatMap((chat) => chat.session.repAnswers.map((a) => ({ sessionId: chat.session.id, ...a })))
     .sort((a, b) => b.answeredAt.localeCompare(a.answeredAt));
 }

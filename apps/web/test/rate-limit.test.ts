@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkRateLimit } from "../lib/rate-limit";
+import { checkRateLimit, clientIp } from "../lib/rate-limit";
 
 describe("הגבלת קצב", () => {
   it("מאפשרת בקשות עד המכסה, וחוסמת את הבאה", () => {
@@ -23,5 +23,33 @@ describe("הגבלת קצב", () => {
   it("מפתחות שונים לא משפיעים אחד על השני", () => {
     checkRateLimit("a", 1, 60_000, 0);
     expect(() => checkRateLimit("b", 1, 60_000, 0)).not.toThrow();
+  });
+});
+
+describe("כתובת IP של הלקוח", () => {
+  const withTrustProxy = (value: string | undefined, run: () => void) => {
+    const original = process.env.TRUST_PROXY;
+    if (value === undefined) delete process.env.TRUST_PROXY;
+    else process.env.TRUST_PROXY = value;
+    try {
+      run();
+    } finally {
+      if (original === undefined) delete process.env.TRUST_PROXY;
+      else process.env.TRUST_PROXY = original;
+    }
+  };
+
+  it("בלי TRUST_PROXY, מתעלמת מ-x-forwarded-for ומחזירה מפתח משותף", () => {
+    withTrustProxy(undefined, () => {
+      const req = new Request("http://x", { headers: { "x-forwarded-for": "1.2.3.4" } });
+      expect(clientIp(req)).toBe("shared");
+    });
+  });
+
+  it("עם TRUST_PROXY=1, קוראת את ה-IP מהכותרת", () => {
+    withTrustProxy("1", () => {
+      const req = new Request("http://x", { headers: { "x-forwarded-for": "1.2.3.4, 5.6.7.8" } });
+      expect(clientIp(req)).toBe("1.2.3.4");
+    });
   });
 });
