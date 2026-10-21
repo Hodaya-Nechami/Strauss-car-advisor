@@ -282,6 +282,12 @@ export function classifyProviderError(err: unknown): FailureKind | null {
   if (err instanceof OpenAI.APIError) return typeof err.status === "number" ? kindByStatus(err.status) : "server";
   // תקלת רשת (fetch failed)
   if (err instanceof TypeError && /fetch/i.test(err.message)) return "server";
+  // גיבוי: אם ה-instanceof נכשל (למשל כשהבאנדל של Next.js טוען עותק נפרד של @google/genai,
+  // ואז err הוא טכנית ApiError ממודול אחר) אבל לצורה יש status מספרי - מסווגים לפי זה בכל זאת,
+  // כדי שלא תיזרק שגיאה לא מסווגת למרות שברור מה היא.
+  if (err && typeof err === "object" && "status" in err && typeof (err as { status: unknown }).status === "number") {
+    return kindByStatus((err as { status: number }).status);
+  }
   return null;
 }
 
