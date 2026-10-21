@@ -1,3 +1,5 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -6,6 +8,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 // השרת קורא את קבצי ההגדרות מהתיקייה הזו
 process.env.CONFIG_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "config");
+// מסד נתונים זמני ונקי לכל הרצה - לא נשמר בריפו ולא נצבר בין הרצות
+process.env.CHATS_DB_PATH = join(mkdtempSync(join(tmpdir(), "strauss-server-test-")), "chats.db");
 let server: typeof import("../lib/server");
 
 beforeAll(async () => {
@@ -76,9 +80,9 @@ describe("פעולות מסך בלי הבוט", () => {
 
   it("לא מוסיפים להיסטוריה בזמן שהבוט באמצע תור", async () => {
     const id = server.createChat().sessionId!;
-    (globalThis as any)[server.STATE_KEY].chats.get(id).busy = true;
+    (globalThis as any)[server.STATE_KEY].chats.claim(id);
     await expect(server.updateProfile(id, profile)).rejects.toMatchObject({ status: 409 });
-    (globalThis as any)[server.STATE_KEY].chats.get(id).busy = false;
+    (globalThis as any)[server.STATE_KEY].chats.release(id);
   });
 
   it("שיחה שלא קיימת מחזירה 404", async () => {
