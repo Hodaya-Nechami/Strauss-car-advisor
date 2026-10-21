@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * העלאת תלוש שכר: העובד מעלה תלוש, נטו קורא ממנו את הנתונים, והעובד מאשר לפני שמירה.
+ * העלאת תלוש שכר: העובד מעלה תלוש, נטבוט קורא ממנו את הנתונים, והעובד מאשר לפני שמירה.
  * שום דבר לא נשמר בלי אישור, והתלוש עצמו לא נשמר בכלל.
  */
 import { useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
@@ -188,7 +188,7 @@ export function PayslipDropzone({ onFile, onSample }: { onFile: (f: File) => voi
   );
 }
 
-const STEPS = ["נטו קורא את התלוש...", "מחפש את שכר הבסיס וההפרשות...", "בודק את נקודות הזיכוי...", "עוד רגע, כמעט סיימתי..."];
+const STEPS = ["נטבוט קורא את התלוש...", "מחפש את שכר הבסיס וההפרשות...", "בודק את נקודות הזיכוי...", "עוד רגע, כמעט סיימתי..."];
 
 function Reading({ name }: { name: string }) {
   const [step, setStep] = useState(0);
@@ -327,7 +327,7 @@ function Review({
         <label className="slip-field extra">
           <span className="slip-label">קבוצת זכאות</span>
           <select value={group} onChange={(e) => setGroup(e.target.value)}>
-            <option value="">לא יודע/ת, נטו ישאל</option>
+            <option value="">לא יודע/ת, נטבוט ישאל</option>
             {["א", "ב", "ג", "ד"].map((g) => (
               <option key={g} value={g}>
                 קבוצה {g}

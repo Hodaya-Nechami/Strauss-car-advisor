@@ -65,7 +65,7 @@ describe("תמונות הרכבים", () => {
   });
 });
 
-describe("נטו, הדמות", () => {
+describe("נטבוט, הדמות", () => {
   it("כל מצב רוח מצויר, עם המחלקה שלו לאנימציה", () => {
     for (const mood of ["idle", "thinking", "happy", "sad", "waiting"] as const) {
       const html = renderToStaticMarkup(<Mascot mood={mood} />);
@@ -75,7 +75,7 @@ describe("נטו, הדמות", () => {
   });
 
   it("עם כותרת הוא תמונה נגישה, ובלי כותרת הוא קישוט שקורא מסך מדלג עליו", () => {
-    expect(renderToStaticMarkup(<Mascot title="נטו" />)).toContain('aria-label="נטו"');
+    expect(renderToStaticMarkup(<Mascot title="נטבוט" />)).toContain('aria-label="נטבוט"');
     expect(renderToStaticMarkup(<Mascot />)).toContain('aria-hidden="true"');
   });
 });
