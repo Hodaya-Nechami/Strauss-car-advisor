@@ -84,7 +84,7 @@ export function Sidebar({
           {hasProfile ? (
             <ProfilePanel sessionId={sessionId!} profile={profile} onView={onView} />
           ) : (
-            <p className="rail-empty">עוד לא מסרת נתונים. אפשר לספר לנטו בצ'אט, או להעלות תלוש והוא ימלא הכול.</p>
+            <p className="rail-empty">עוד לא מסרת נתונים. אפשר לספר לנטבוט בצ'אט, או להעלות תלוש והוא ימלא הכול.</p>
           )}
         </section>
 
