@@ -21,3 +21,10 @@ export function requireSessionId(value: unknown): string {
   if (typeof value !== "string" || !value) throw new ChatError(400, "חסר מזהה שיחה");
   return value;
 }
+
+/** מסך הנציג: סיסמה אחת לכל הצוות, מוגדרת ב-REP_PASSWORD. בלי הגדרה, המסך חסום. */
+export function requireRepPassword(req: Request) {
+  const configured = process.env.REP_PASSWORD;
+  if (!configured) throw new ChatError(503, "מסך הנציג לא מוגדר. יש להגדיר REP_PASSWORD בקובץ apps/web/.env.");
+  if (req.headers.get("x-rep-password") !== configured) throw new ChatError(401, "סיסמה שגויה");
+}
