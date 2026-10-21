@@ -455,6 +455,13 @@ export function listOpenRepQuestions() {
   );
 }
 
+/** בשביל מסך הנציג: היסטוריית השאלות שכבר נענו, מכל השיחות, החדשות קודם */
+export function listRepHistory() {
+  return [...state().chats.values()]
+    .flatMap((chat) => chat.session.repAnswers.map((a) => ({ sessionId: chat.session.id, ...a })))
+    .sort((a, b) => b.answeredAt.localeCompare(a.answeredAt));
+}
+
 /** בשביל מסך הנציג: הנציג ענה, והשיחה של העובד ממשיכה מאותה נקודה */
 export async function answerRepQuestion(sessionId: string, ticketId: string, answer: string): Promise<ChatView> {
   const s = state();

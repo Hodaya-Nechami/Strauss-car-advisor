@@ -2993,3 +2993,159 @@ a {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ===== מסך הנציג (/rep) ===== */
+.rep-shell {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.rep-center {
+  min-height: 100vh;
+  justify-content: center;
+}
+
+.rep-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.rep-login {
+  max-width: 380px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rep-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.rep-input,
+.rep-textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 10px 12px;
+  font: inherit;
+  outline: none;
+}
+
+.rep-input:focus,
+.rep-textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.rep-textarea {
+  resize: vertical;
+  min-height: 46px;
+}
+
+.rep-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.rep-primary:hover:not(:disabled) {
+  color: #ffffff;
+  border-color: var(--accent-strong);
+}
+
+.rep-primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+
+.rep-error {
+  color: var(--bad);
+  background: var(--bad-soft);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+}
+
+.rep-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.rep-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rep-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rep-item {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface-2);
+}
+
+.rep-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rep-session {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.rep-question {
+  margin: 0;
+  font-weight: 500;
+}
+
+.rep-answered {
+  margin: 0;
+  color: var(--muted);
+}
+
+.rep-answer-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.rep-answer-row .rep-textarea {
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .rep-answer-row {
+    flex-direction: column;
+  }
+}
