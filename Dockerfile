@@ -18,6 +18,9 @@ COPY packages/engine/package.json packages/engine/package.json
 COPY packages/agent/package.json packages/agent/package.json
 COPY packages/data/package.json packages/data/package.json
 COPY apps/web/package.json apps/web/package.json
+# node-gyp (גיבוי אם better-sqlite3 לא מוצא בינארי מוכן) בורר כותרות Node מ-nodejs.org כברירת מחדל.
+# הן כבר כלולות בתמונת הבסיס תחת /usr/local/include/node, אז מצביעים לשם במקום להוריד.
+ENV npm_config_nodedir=/usr/local
 RUN npm ci
 
 FROM deps AS build

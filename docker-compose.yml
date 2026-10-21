@@ -1,4 +1,5 @@
 # הרצה: docker compose up --build, ואז פותחים http://localhost:3000
+# אם פורט 3000 תפוס אצלכם, אפשר להרים על פורט אחר בלי לערוך את הקובץ: WEB_PORT=3900 docker compose up --build
 # צריך קודם ליצור apps/web/.env עם מפתח API (ראו apps/web/.env.example וה-README).
 #
 # strauss_data הוא volume ששורד הפעלה מחדש: שם יישמרו מסדי ה-SQLite
@@ -10,7 +11,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     env_file:
       - apps/web/.env
     environment:
