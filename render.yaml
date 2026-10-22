@@ -50,6 +50,11 @@ services:
         sync: false
       - key: REP_EMAILS
         sync: false
+      # כניסה קבועה במייל וסיסמה (למשל לשופטים). המייל הזה נכנס גם למסך הנציג
+      - key: LOGIN_EMAIL
+        sync: false
+      - key: LOGIN_PASSWORD
+        sync: false
       # עובדים שמורשים להיכנס (דומיין עם @ או כתובות). ריק: כל חשבון Google
       - key: ALLOWED_EMAILS
         sync: false

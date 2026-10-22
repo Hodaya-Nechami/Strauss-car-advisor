@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { googleLoginEnabled } from "@/auth";
+import { googleLoginEnabled, passwordLoginEnabled } from "@/auth";
 import { LoginCard } from "./LoginCard";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +15,7 @@ export default async function LoginPage({
   return (
     <LoginCard
       enabled={googleLoginEnabled()}
+      passwordEnabled={googleLoginEnabled() && passwordLoginEnabled()}
       // רק נתיב בתוך האתר, כדי שקישור זדוני לא ישלח את העובד לאתר אחר אחרי הכניסה
       callbackUrl={callbackUrl?.startsWith("/") && !callbackUrl.startsWith("//") ? callbackUrl : "/"}
       error={error}

@@ -3548,6 +3548,51 @@ a {
   cursor: progress;
 }
 
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-top: 14px;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--stage-muted);
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.login-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.login-input::placeholder {
+  color: var(--stage-muted);
+  text-align: right;
+}
+
+.login-input:focus-visible {
+  outline: 3px solid var(--p-sky);
+  outline-offset: 2px;
+}
+
 .login-note {
   margin-top: 14px;
   font-size: 0.85rem;
