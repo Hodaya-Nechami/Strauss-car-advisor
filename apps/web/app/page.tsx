@@ -80,6 +80,7 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const payslip = usePayslip();
   const demo = useDemoData();
@@ -183,6 +184,7 @@ export default function ChatPage() {
 
   function showDemo() {
     newChat();
+    setDemoOpen(true);
     setTimeout(() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
   }
 
@@ -268,7 +270,7 @@ export default function ChatPage() {
               {transcript.length === 0 && payslip.slip.phase === "idle" && (
                 <>
                   <PayslipDropzone onFile={payslip.readFile} onSample={payslip.readSample} />
-                  <DemoPicker data={demo} onView={applyView} />
+                  <DemoPicker data={demo} open={demoOpen} onToggle={() => setDemoOpen((o) => !o)} onView={applyView} />
                 </>
               )}
 
