@@ -15,7 +15,7 @@ services:
     dockerContext: .
     plan: free
     region: frankfurt
-    branch: nechami/n9-docker-deploy
+    branch: main
     envVars:
       - key: DB_PATH
         value: /app/.data/value-of-use.db
