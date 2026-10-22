@@ -132,7 +132,7 @@ describe("קריאת תלוש שכר", () => {
     );
   });
 
-  it("שולח ל-Claude את הקובץ כ-document עם tool_choice כפוי על כלי יחיד", async () => {
+  it("שולח ל-Claude את הקובץ כ-document, עם tool_choice auto (tool כפוי לא נתמך במודל הזה)", async () => {
     const requests: any[] = [];
     const client = {
       messages: {
@@ -148,7 +148,7 @@ describe("קריאת תלוש שכר", () => {
     expect(r.via).toBe("Claude");
     const req = requests[0];
     expect(req.model).toBe("claude-test");
-    expect(req.tool_choice).toEqual({ type: "tool", name: "report_payslip" });
+    expect(req.tool_choice).toEqual({ type: "auto" });
     expect(req.tools[0].name).toBe("report_payslip");
     expect(req.messages[0].content[0]).toEqual({
       type: "document",
