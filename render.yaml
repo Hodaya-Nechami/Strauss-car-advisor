@@ -35,3 +35,11 @@ services:
         sync: false
       - key: REP_PASSWORD
         sync: false
+      - key: AUTH_SECRET
+        sync: false
+      - key: AUTH_GOOGLE_ID
+        sync: false
+      - key: AUTH_GOOGLE_SECRET
+        sync: false
+      - key: REP_EMAILS
+        sync: false

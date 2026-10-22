@@ -66,6 +66,13 @@ npm run typecheck
 docker compose run --rm data-import
 ```
 
+## מסך הנציג
+
+המסך נמצא ב-`http://localhost:3000/rep`. יש שתי דרכים להיכנס אליו:
+
+- **סיסמה משותפת:** מגדירים `REP_PASSWORD` ב-`apps/web/.env`. מתאים לפיתוח ולדמו.
+- **התחברות עם גוגל:** מגדירים `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` ו-`REP_EMAILS`. רק המיילים שב-`REP_EMAILS` נכנסים, והסיסמה כבר לא בשימוש. ההסבר המלא, כולל איך מקבלים את המפתחות, נמצא ב-`apps/web/.env.example`.
+
 ## מבנה הפרויקט
 
 | תיקייה | מה יש בה | מצב | אחראית |
