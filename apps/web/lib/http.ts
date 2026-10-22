@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth, googleLoginEnabled, isAllowedRep } from "@/auth";
 import { ChatError } from "./server";
 
 /** מריץ פעולה של API ומחזיר JSON, עם הודעת שגיאה בעברית */
@@ -22,8 +23,16 @@ export function requireSessionId(value: unknown): string {
   return value;
 }
 
-/** מסך הנציג: סיסמה אחת לכל הצוות, מוגדרת ב-REP_PASSWORD. בלי הגדרה, המסך חסום. */
-export function requireRepPassword(req: Request) {
+/**
+ * מסך הנציג: כשמוגדרת התחברות עם גוגל, רק מי שמחובר עם מייל מ-REP_EMAILS.
+ * אחרת, סיסמה אחת לכל הצוות מ-REP_PASSWORD. בלי אף אחד מהם, המסך חסום.
+ */
+export async function requireRep(req: Request) {
+  if (googleLoginEnabled()) {
+    const session = await auth();
+    if (!isAllowedRep(session?.user?.email)) throw new ChatError(401, "יש להתחבר עם חשבון גוגל מורשה");
+    return;
+  }
   const configured = process.env.REP_PASSWORD;
   if (!configured) throw new ChatError(503, "מסך הנציג לא מוגדר. יש להגדיר REP_PASSWORD בקובץ apps/web/.env.");
   if (req.headers.get("x-rep-password") !== configured) throw new ChatError(401, "סיסמה שגויה");

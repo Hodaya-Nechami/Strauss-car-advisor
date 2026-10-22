@@ -1,0 +1,40 @@
+# הרצה: docker compose up --build, ואז פותחים http://localhost:3000
+# אם פורט 3000 תפוס אצלכם, אפשר להרים על פורט אחר בלי לערוך את הקובץ: WEB_PORT=3900 docker compose up --build
+# צריך קודם ליצור apps/web/.env עם מפתח API (ראו apps/web/.env.example וה-README).
+#
+# strauss_data הוא volume ששורד הפעלה מחדש: שם יישמרו מסדי ה-SQLite
+# (מאגר שווי השימוש מ-N3/N4, ובעתיד גם השיחות מ-N6).
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    env_file:
+      - apps/web/.env
+    environment:
+      DB_PATH: /app/.data/value-of-use.db
+      CHATS_DB_PATH: /app/.data/chats.db
+    volumes:
+      - strauss_data:/app/.data
+    restart: unless-stopped
+
+  # ייבוא חד-פעמי של מאגר שווי השימוש ל-SQLite (N3/N4), לתוך אותו volume שה-web רואה.
+  # הרצה: docker compose run --rm data-import
+  data-import:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["npm", "run", "data:import"]
+    environment:
+      DB_PATH: /app/.data/value-of-use.db
+      REPORT_PATH: /app/.data/duplicate-report.json
+    volumes:
+      - strauss_data:/app/.data
+    profiles:
+      - tools
+
+volumes:
+  strauss_data:

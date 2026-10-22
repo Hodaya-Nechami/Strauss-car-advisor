@@ -47,6 +47,32 @@ npm test
 npm run typecheck
 ```
 
+## הפעלה עם Docker
+
+צריך Docker Desktop (או Docker Engine + Compose). לא צריך Node.js מותקן על המחשב.
+
+1. יוצרים את `apps/web/.env` עם המפתחות, בדיוק כמו בהפעלה הרגילה (סעיף קודם).
+2. מרימים:
+   ```
+   docker compose up --build
+   ```
+   ופותחים `http://localhost:3000`.
+
+הנתונים (מאגר שווי השימוש וב-SQLite, ובעתיד גם היסטוריית השיחות) נשמרים ב-volume בשם `strauss_data`,
+ושורדים `docker compose down` ו-`docker compose up` מחדש. למחיקה מלאה: `docker compose down -v`.
+
+כדי לייבא את מאגר שווי השימוש (`data/source/value-of-use-2026.csv`) לתוך אותו volume, בלי Node מותקן מקומית:
+```
+docker compose run --rm data-import
+```
+
+## מסך הנציג
+
+המסך נמצא ב-`http://localhost:3000/rep`. יש שתי דרכים להיכנס אליו:
+
+- **סיסמה משותפת:** מגדירים `REP_PASSWORD` ב-`apps/web/.env`. מתאים לפיתוח ולדמו.
+- **התחברות עם גוגל:** מגדירים `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` ו-`REP_EMAILS`. רק המיילים שב-`REP_EMAILS` נכנסים, והסיסמה כבר לא בשימוש. ההסבר המלא, כולל איך מקבלים את המפתחות, נמצא ב-`apps/web/.env.example`.
+
 ## מבנה הפרויקט
 
 | תיקייה | מה יש בה | מצב | אחראית |
