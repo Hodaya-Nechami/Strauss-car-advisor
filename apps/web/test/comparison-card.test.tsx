@@ -162,3 +162,28 @@ describe("קריאת תלוש: כרטיס האישור", () => {
     expect(html).toContain('value="14200"');
   });
 });
+
+describe("התלוש של החודש הבא", () => {
+  const noa = { group: "ג", occupation: "מנהל/ת מוצר", baseSalary: 18500, commissions: 0, bonus: 0, pensionRate: 6, studyFundRate: 2.5, creditPoints: 2.75 };
+
+  it("מציג תלוש עם החלופה: שורות שהשתנו מסומנות, הסכום של היום מחוק, והנטו זהה לכרטיס", async () => {
+    const data = await compareVia(noa, { kind: "car", car: "COROLLA CROSS", participation: 300 }, { kind: "car", car: "ATTO 3", participation: 300 });
+    const html = renderToStaticMarkup(<ComparisonCard data={data} />);
+    const text = visibleText(html);
+
+    expect(text).toContain("איך ייראה התלוש שלי בחודש הבא?");
+    // שווי השימוש ירד ב-940: מחוק 4,070, חדש 3,130, ובצבע של שינוי טוב לנטו
+    expect(text).toContain("שווי שימוש ברכב 4,070 ₪ 3,130 ₪ −940 ₪");
+    expect(html).toContain(`slip-chip up"><bdi>−940 ₪`);
+    // שכר שלא השתנה מופיע בלי סכום מחוק
+    expect(text).toContain("שכר: בסיס, עמלות ובונוס 18,500 ₪");
+    expect(text).toContain("נטו לתשלום 11,693 ₪ +661 ₪ לעומת היום");
+    // שורה שהיא אפס בשני המצבים לא מופיעה
+    expect(text).not.toContain("אחזקת רכב");
+  });
+
+  it("אין תלוש כשהחלופה לא חושבה", async () => {
+    const data = await compareVia(noa, { kind: "car", car: "COROLLA CROSS", participation: 300 }, { kind: "car", car: "MODEL 3", participation: 500 });
+    expect(visibleText(renderToStaticMarkup(<ComparisonCard data={data} />))).not.toContain("התלוש שלי בחודש הבא");
+  });
+});

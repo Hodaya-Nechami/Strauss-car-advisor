@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -145,5 +145,48 @@ describe("תלוש שכר", () => {
 
   it("קובץ שאינו PDF או תמונה נדחה לפני שליחה לספק", async () => {
     await expect(server.readPayslip(new Uint8Array([1, 2, 3]), "text/plain")).rejects.toMatchObject({ status: 415 });
+  });
+});
+
+describe("שליחת האפשרויות למייל", () => {
+  it("נבנה מהשיחה השמורה, נשלח לכתובת של המחובר, ונרשם בשיחה", async () => {
+    const v = await server.startDemo("E-001");
+    const sent: any[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      sent.push(JSON.parse(String(init.body)));
+      return new Response("{}", { status: 201 });
+    });
+    process.env.BREVO_API_KEY = "test-key";
+    process.env.MAIL_FROM = "bot@example.org";
+    try {
+      const after = await server.emailSummary(v.sessionId!, { email: "noa@example.org", name: "נועה לוי" }, "https://example.org");
+      expect(sent).toHaveLength(1);
+      expect(sent[0].to).toEqual([{ email: "noa@example.org", name: "נועה לוי" }]);
+      expect(sent[0].htmlContent).toContain("שלום נועה,");
+      expect(sent[0].htmlContent).toContain("ההשוואה האחרונה שבדקת");
+      expect(sent[0].textContent).toMatch(/^1\. /m);
+      expect(after.transcript.at(-1)).toMatchObject({ role: "notice", text: "סיכום האפשרויות נשלח למייל noa@example.org" });
+      expect(sessionMessages(v.sessionId!).at(-1)!.content).toContain("שלח לעצמו למייל");
+    } finally {
+      vi.unstubAllGlobals();
+      delete process.env.BREVO_API_KEY;
+      delete process.env.MAIL_FROM;
+    }
+  });
+
+  it("טיוטה בלי שירות שליחה: כל האפשרויות בטקסט, וקישור Gmail שלא ארוך מדי", async () => {
+    const v = await server.startDemo("E-001");
+    const draft = await server.emailDraft(v.sessionId!, "נועה לוי", "https://example.org");
+    expect(draft.subject).toContain("כל האפשרויות שלך");
+    expect(draft.body).toMatch(/^1\. .+נטו .+₪/m);
+    expect(draft.body).toContain("https://example.org");
+    // דפדפנים ו-Gmail מגבילים את אורך הכתובת. עם כל הרכבים בקטלוג עדיין רחוק מהגבול.
+    const { draftLinks } = await import("../app/mail-links");
+    expect(draftLinks({ to: "noa@example.org", ...draft }).gmail.length).toBeLessThan(12_000);
+  });
+
+  it("בלי השוואה בשיחה אין מה לשלוח", async () => {
+    const id = server.createChat().sessionId!;
+    await expect(server.emailSummary(id, { email: "a@example.org", name: null }, "https://example.org")).rejects.toMatchObject({ status: 400 });
   });
 });

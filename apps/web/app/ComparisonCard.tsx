@@ -8,6 +8,8 @@ import { shekel } from "./cars";
 import { Mascot } from "./Mascot";
 import { useCountUp } from "./motion";
 import { NetBridge } from "./NetBridge";
+import { NextPayslip } from "./NextPayslip";
+import { draftLinks, type MailDraft } from "./mail-links";
 import type { ChatView, ComparisonView, ReferenceCheck, SideInfo, SideView } from "./types";
 
 const BADGE: Record<ComparisonView["eligibility"]["status"], string> = {
@@ -213,6 +215,72 @@ function RankButton({ sessionId, today, onView }: { sessionId: string; today: un
   );
 }
 
+/**
+ * כל האפשרויות למייל. בדרך כלל נפתח מייל מוכן בתיבת הדואר של העובד, והוא רק לוחץ "שליחה".
+ * אם בשרת מוגדר שירות שליחה, המערכת שולחת בעצמה לכתובת שאיתה העובד נכנס.
+ */
+function EmailButton({ sessionId, onView }: { sessionId: string; onView: (v: ChatView) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [links, setLinks] = useState<{ gmail: string; mailto: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function send() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+      const data = (await res.json()) as { view?: ChatView; sentTo?: string; draft?: MailDraft; error?: string };
+      if (!res.ok) setError(data.error ?? "לא הצלחתי להכין את המייל");
+      else if (data.draft) {
+        const l = draftLinks(data.draft);
+        setLinks(l);
+        // נפתח בלשונית חדשה. אם הדפדפן חוסם חלונות, הקישורים שמתחת לכפתור עושים את אותו דבר.
+        const tab = window.open(l.gmail, "_blank");
+        if (tab) tab.opener = null;
+      } else if (data.view) {
+        setSentTo(data.sentTo ?? "");
+        onView(data.view);
+      }
+    } catch {
+      setError("אין חיבור לשרת");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="email-cta">
+      <button type="button" className="ghost-button" onClick={() => void send()} disabled={busy}>
+        <Icon name="mail" size={18} />
+        {busy ? "מכין את המייל..." : "שלחו לי את כל האפשרויות למייל"}
+      </button>
+      {links && !error && (
+        <div className="sent" role="status">
+          <Icon name="check" size={16} /> פתחתי לך מייל מוכן. נשאר רק ללחוץ &quot;שליחה&quot;.
+          <span className="mail-links">
+            לא נפתח?{" "}
+            <a href={links.gmail} target="_blank" rel="noopener noreferrer">
+              פתיחה ב-Gmail
+            </a>{" "}
+            · <a href={links.mailto}>בתוכנת המייל</a>
+          </span>
+        </div>
+      )}
+      {sentTo !== null && !error && (
+        <div className="sent" role="status">
+          <Icon name="check" size={16} /> נשלח{sentTo ? <> אל <bdi>{sentTo}</bdi></> : ""}
+        </div>
+      )}
+      {error && <div className="error">{error}</div>}
+    </div>
+  );
+}
+
 export function ComparisonCard({
   data,
   input,
@@ -328,6 +396,8 @@ export function ComparisonCard({
 
       {data.missing.length > 0 && <div className="missing">חסר: {data.missing.join(", ")}</div>}
 
+      {t && a && <NextPayslip today={t} next={a} label={altLabel} />}
+
       {(t || a) && (
         <details className="more">
           <summary>
@@ -367,6 +437,8 @@ export function ComparisonCard({
       {sessionId && input?.today !== undefined && onView && t && showRank && (
         <RankButton sessionId={sessionId} today={input.today} onView={onView} />
       )}
+
+      {sessionId && input?.today !== undefined && onView && t && <EmailButton sessionId={sessionId} onView={onView} />}
 
       {sessionId && input?.today !== undefined && onView && (
         <Recalculate sessionId={sessionId} today={input.today} onView={onView} />

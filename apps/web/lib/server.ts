@@ -42,7 +42,10 @@ import {
   type ReferenceResult,
   type SampleEmployee,
 } from "./demo";
+import { sendMail } from "./mail";
 import { redactIdNumbers } from "./privacy";
+import { buildSummaryEmail } from "./summary-email";
+import type { ComparisonView, RankingView } from "../app/types";
 
 /** השוואה במסך. בהדגמה מצורפת גם הבדיקה מול נטו הייחוס של המארגנים. */
 export type ScreenComparison = ComparisonRecord & { reference?: ReferenceCheck };
@@ -117,7 +120,7 @@ function state(): ServerState {
   return g[STATE_KEY]!;
 }
 
-/** הגדרות הבוט: Gemini אם יש GEMINI_API_KEY, אחרת Claude. נבנות פעם אחת לכל תהליך. */
+/** הגדרות הבוט: שרשרת הספקים שיש להם מפתח, לפי LLM_PROVIDER. נבנות פעם אחת לכל תהליך. */
 function agentOptions(s: ServerState): AgentOptions {
   if (!s.agent) {
     try {
@@ -429,7 +432,7 @@ export async function readPayslip(data: Uint8Array, mimeType: string): Promise<P
   if (!read) {
     throw new ChatError(
       503,
-      "קריאת תלוש צריכה מפתח של Gemini או של OpenRouter בקובץ apps/web/.env. בינתיים אפשר לכתוב את הנתונים בצ'אט.",
+      "קריאת תלוש צריכה מפתח של Gemini, OpenRouter, OpenAI או Claude בקובץ apps/web/.env. בינתיים אפשר לכתוב את הנתונים בצ'אט.",
     );
   }
   try {
@@ -440,6 +443,62 @@ export async function readPayslip(data: Uint8Array, mimeType: string): Promise<P
     console.error("[payslip] read failed:", err instanceof Error ? err.message.slice(0, 300) : "unknown");
     throw new ChatError(500, "לא הצלחתי לקרוא את התלוש. נסו שוב, או כתבו את הנתונים בצ'אט.");
   }
+}
+
+/** ההשוואה האחרונה בשיחה שחושבה בפועל, עם המצב של היום שאפשר לדרג מולו */
+function latestComparison(chat: StoredChat): { today: unknown; result: ComparisonView } | null {
+  for (const entry of [...chat.transcript].reverse()) {
+    for (const c of [...(entry.comparisons ?? [])].reverse()) {
+      const input = c.input as { today?: unknown } | undefined;
+      if (input?.today !== undefined && c.result.ok === true && c.result.today) {
+        return { today: input.today, result: c.result as unknown as ComparisonView };
+      }
+    }
+  }
+  return null;
+}
+
+/** המייל עם כל האפשרויות: נבנה מהשיחה השמורה בשרת ולא ממה שהדפדפן שולח */
+async function summaryMail(s: ServerState, chat: StoredChat, name: string | null, appUrl: string) {
+  const last = latestComparison(chat);
+  if (!last) throw new ChatError(400, "עוד אין חלופות לשלוח. קודם בודקים השוואה אחת, ואז אפשר לשלוח.");
+  const ranking = await runTool("rank_alternatives", { today: last.today }, context(s, chat));
+  return buildSummaryEmail({
+    name,
+    comparison: last.result,
+    ranking: ranking.ok === true ? (ranking as unknown as RankingView) : null,
+    appUrl,
+  });
+}
+
+/**
+ * טיוטת מייל עם כל האפשרויות, שהדפדפן פותח בתיבת הדואר של העובד. העובד שולח אותה בעצמו,
+ * ולכן לא צריך שירות שליחה, והיא עובדת לכל עובד ולכל כתובת.
+ */
+export async function emailDraft(sessionId: string, name: string | null, appUrl: string): Promise<{ subject: string; body: string }> {
+  const s = state();
+  const chat = findChat(sessionId);
+  const mail = await summaryMail(s, chat, name, appUrl);
+  return { subject: mail.subject, body: mail.text };
+}
+
+/**
+ * שולח לעובד למייל את כל האפשרויות שלו, מהמשתלמת ביותר, ואת ההשוואה האחרונה.
+ * רק כששירות שליחה מוגדר (lib/mail.ts), ורק לכתובת של החשבון המחובר.
+ */
+export async function emailSummary(
+  sessionId: string,
+  user: { email: string; name: string | null },
+  appUrl: string,
+): Promise<ChatView> {
+  const s = state();
+  await withLock(sessionId, async (chat) => {
+    const mail = await summaryMail(s, chat, user.name, appUrl);
+    await sendMail({ to: user.email, toName: user.name, ...mail });
+    note(chat, "[פעולה מהמסך, לא בצ'אט] העובד שלח לעצמו למייל סיכום של כל האפשרויות ושל ההשוואה האחרונה.");
+    chat.transcript.push({ role: "notice", text: `סיכום האפשרויות נשלח למייל ${user.email}`, at: now() });
+  });
+  return view(s.chats.get(sessionId));
 }
 
 /** בשביל מסך הנציג: כל השאלות הפתוחות מכל השיחות */
