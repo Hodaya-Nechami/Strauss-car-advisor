@@ -11,6 +11,7 @@ const ERRORS: Record<string, string> = {
   OAuthCallback: "הכניסה עם Google לא הושלמה. נסו שוב.",
   Callback: "הכניסה עם Google לא הושלמה. נסו שוב.",
   Configuration: "הכניסה לא הוגדרה כמו שצריך בשרת.",
+  CredentialsSignin: "המייל או הסיסמה לא נכונים.",
 };
 
 /** הסמל הרשמי של Google, בצבעים שלו, כמו שמקובל בכפתור כניסה */
@@ -27,17 +28,38 @@ function GoogleLogo() {
 
 export function LoginCard({
   enabled,
+  passwordEnabled,
   callbackUrl,
   error,
   openToAll,
 }: {
   enabled: boolean;
+  passwordEnabled: boolean;
   callbackUrl: string;
   error?: string;
   openToAll: boolean;
 }) {
   const [busy, setBusy] = useState(false);
-  const message = error ? (ERRORS[error] ?? "הכניסה נכשלה. נסו שוב.") : null;
+  const [failed, setFailed] = useState<string | null>(null);
+  const code = failed ?? error;
+  const message = code ? (ERRORS[code] ?? "הכניסה נכשלה. נסו שוב.") : null;
+
+  /** כניסה במייל וסיסמה בלי לעזוב את הדף, כדי להראות שגיאה במקום */
+  async function passwordLogin(form: FormData) {
+    setBusy(true);
+    setFailed(null);
+    const result = await signIn("password", {
+      email: form.get("email"),
+      password: form.get("password"),
+      redirect: false,
+    });
+    if (result?.error) {
+      setFailed("CredentialsSignin");
+      setBusy(false);
+      return;
+    }
+    window.location.assign(callbackUrl);
+  }
 
   return (
     <main className="login">
@@ -78,6 +100,33 @@ export function LoginCard({
               להמשיך למערכת
             </a>
           </>
+        )}
+
+        {passwordEnabled && (
+          <form className="login-form" action={passwordLogin}>
+            <div className="login-divider">או במייל וסיסמה</div>
+            <input
+              className="login-input"
+              type="email"
+              name="email"
+              placeholder="מייל"
+              autoComplete="username"
+              dir="ltr"
+              required
+            />
+            <input
+              className="login-input"
+              type="password"
+              name="password"
+              placeholder="סיסמה"
+              autoComplete="current-password"
+              dir="ltr"
+              required
+            />
+            <button type="submit" className="google-button" disabled={busy}>
+              {busy ? "נכנס..." : "כניסה"}
+            </button>
+          </form>
         )}
 
         {enabled && openToAll && <p className="login-note">בהדגמה אפשר להיכנס עם כל חשבון Google.</p>}

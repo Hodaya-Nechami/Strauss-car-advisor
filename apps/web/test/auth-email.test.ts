@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { draftLinks } from "../app/mail-links";
-import { googleLoginEnabled, isAllowedEmployee, isAllowedRep } from "../lib/access";
+import { checkPasswordLogin, googleLoginEnabled, isAllowedEmployee, isAllowedRep, passwordLoginEnabled } from "../lib/access";
 import { BREVO_URL, sendMail } from "../lib/mail";
 import { buildSummaryEmail, escapeHtml } from "../lib/summary-email";
 import type { ComparisonView, RankingView } from "../app/types";
@@ -30,6 +30,20 @@ describe("כניסה עם Google", () => {
     expect(isAllowedRep("rep@strauss.com", env)).toBe(true);
     expect(isAllowedRep("dana@strauss.com", env)).toBe(false);
     expect(isAllowedRep("rep@strauss.com", {})).toBe(false);
+  });
+
+  it("מייל וסיסמה קבועים: רק עם שניהם, בלי תלות באותיות גדולות במייל, והמייל נכנס למסך הנציג", () => {
+    expect(passwordLoginEnabled({ LOGIN_EMAIL: "me@gmail.com" })).toBe(false);
+    expect(checkPasswordLogin("me@gmail.com", "", { LOGIN_EMAIL: "me@gmail.com" })).toBe(null);
+    const env = { LOGIN_EMAIL: " Me@Gmail.com ", LOGIN_PASSWORD: "Judges-2026" };
+    expect(passwordLoginEnabled(env)).toBe(true);
+    expect(checkPasswordLogin("ME@gmail.com", "Judges-2026", env)).toBe("me@gmail.com");
+    expect(checkPasswordLogin("me@gmail.com", "judges-2026", env)).toBe(null);
+    expect(checkPasswordLogin("me@gmail.com", "Judges-2026x", env)).toBe(null);
+    expect(checkPasswordLogin("other@gmail.com", "Judges-2026", env)).toBe(null);
+    expect(checkPasswordLogin(undefined, undefined, env)).toBe(null);
+    expect(isAllowedRep("me@gmail.com", env)).toBe(true);
+    expect(isAllowedRep("other@gmail.com", env)).toBe(false);
   });
 });
 

@@ -1,4 +1,6 @@
-import { auth, googleLoginEnabled, isAllowedRep, signIn, signOut } from "@/auth";
+import { AuthError } from "next-auth";
+import { redirect } from "next/navigation";
+import { auth, googleLoginEnabled, isAllowedRep, passwordLoginEnabled, signIn, signOut } from "@/auth";
 import { Icon } from "../Icon";
 import RepDesk from "./RepDesk";
 
@@ -21,6 +23,16 @@ export default async function RepPage({ searchParams }: { searchParams: Promise<
   async function login() {
     "use server";
     await signIn("google", { redirectTo: "/rep" });
+  }
+  async function passwordLogin(form: FormData) {
+    "use server";
+    try {
+      await signIn("password", { email: form.get("email"), password: form.get("password"), redirectTo: "/rep" });
+    } catch (e) {
+      // מייל או סיסמה שגויים. הפניה מוצלחת נזרקת גם היא, ועוברת הלאה.
+      if (e instanceof AuthError) redirect("/rep?error=CredentialsSignin");
+      throw e;
+    }
   }
   const { error } = await searchParams;
 
@@ -45,10 +57,32 @@ export default async function RepPage({ searchParams }: { searchParams: Promise<
         )}
         {error && (
           <div className="rep-error">
-            {error === "AccessDenied" ? "החשבון הזה לא מורשה להיכנס למסך הנציג" : "ההתחברות נכשלה, נסו שוב"}
+            {error === "AccessDenied"
+              ? "החשבון הזה לא מורשה להיכנס למסך הנציג"
+              : error === "CredentialsSignin"
+                ? "המייל או הסיסמה לא נכונים"
+                : "ההתחברות נכשלה, נסו שוב"}
           </div>
         )}
       </form>
+      {passwordLoginEnabled() && (
+        <form className="card rep-login" action={passwordLogin}>
+          <p className="rep-hint">או כניסה במייל וסיסמה:</p>
+          <input className="rep-input" type="email" name="email" placeholder="מייל" autoComplete="username" dir="ltr" required />
+          <input
+            className="rep-input"
+            type="password"
+            name="password"
+            placeholder="סיסמה"
+            autoComplete="current-password"
+            dir="ltr"
+            required
+          />
+          <button type="submit" className="ghost-button rep-primary">
+            כניסה
+          </button>
+        </form>
+      )}
     </div>
   );
 }
