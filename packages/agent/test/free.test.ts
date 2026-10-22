@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ApiError, Type, type Schema } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import type { CatalogCar, Occupation, Rules } from "@strauss/engine";
 import {
@@ -12,6 +13,8 @@ import {
   ProviderHealth,
   ProviderMismatchError,
   SYSTEM_PROMPT,
+  claudeProvider,
+  classifyProviderError,
   createAgentOptionsFromEnv,
   createFreeProviders,
   describeAgentError,
@@ -23,6 +26,7 @@ import {
   resolveMode,
   resumeWithRepAnswer,
   runTurn,
+  toClaudeMessages,
   toGeminiContents,
   tools,
   type FreeOptions,
@@ -110,6 +114,18 @@ function fakeGroq(script: unknown[]) {
   const s = scripted(script);
   const client = { chat: { completions: { create: s.next } } } as unknown as OpenAICompatClient;
   return { provider: openAICompatProvider("groq", "Groq", client, "test-model"), requests: s.requests };
+}
+
+/* ---------- Claude מזויף ---------- */
+const cReply = (content: unknown[], stop_reason = "end_turn") => ({ content, stop_reason });
+const cThinking = { type: "thinking", thinking: "...", signature: "sig-c" };
+const cText = (text: string) => ({ type: "text", text });
+const cCall = (id: string, name: string, input: unknown) => ({ type: "tool_use", id, name, input });
+
+function fakeClaude(script: unknown[]) {
+  const s = scripted(script);
+  const client = { beta: { messages: { create: s.next } } } as any;
+  return { provider: claudeProvider(client, "claude-test"), requests: s.requests };
 }
 
 function freeOptions(providers: FreeProvider[], now: () => number = () => 0): FreeOptions {
@@ -388,7 +404,7 @@ describe("מעבר אוטומטי בין ספקים", () => {
     expect(err).toBeInstanceOf(AllProvidersFailedError);
     expect(describeAgentError(err)).toMatchObject({
       status: 429,
-      message: expect.stringContaining("כל המפתחות החינמיים הגיעו למכסה כרגע (Gemini, Groq)"),
+      message: expect.stringContaining("כל המפתחות הגיעו למכסה כרגע (Gemini, Groq)"),
     });
   });
 
@@ -490,5 +506,88 @@ describe("בחירה לפי המפתחות", () => {
   it("מפתח Gemini לא תקין מחוץ לשרשרת: הודעה בעברית במקום ה-JSON של גוגל", () => {
     const body = JSON.stringify({ error: { code: 400, message: "API key not valid", details: [{ reason: "API_KEY_INVALID" }] } });
     expect(describeAgentError(new ApiError({ message: body, status: 400 })).status).toBe(401);
+  });
+});
+
+describe("Claude ו-OpenAI בשרשרת", () => {
+  it("Claude מריץ כלי: מקבל בחזרה את התשובה המקורית שלו עם החשיבה, ואת התוצאה לפי המזהה שלו", async () => {
+    const ctx = makeCtx();
+    const c = fakeClaude([
+      cReply([cThinking, cCall("toolu_1", "save_employee_profile", { group: "ג" })], "tool_use"),
+      cReply([cText("שמרתי. מה השכר שלך?")]),
+    ]);
+
+    const r = await runTurn(ctx, "קבוצה ג", freeOptions([c.provider]));
+    expect(r.reply).toBe("שמרתי. מה השכר שלך?");
+    expect(r.via).toEqual(["Claude"]);
+
+    const msgs = c.requests[1].messages;
+    expect(msgs.map((m: any) => m.role)).toEqual(["user", "assistant", "user"]);
+    expect(msgs[1].content[0]).toEqual(cThinking);
+    expect(msgs[2].content[0]).toMatchObject({ type: "tool_result", tool_use_id: "toolu_1" });
+    expect(JSON.parse(msgs[2].content[0].content).ok).toBe(true);
+    expect(c.requests[0].system).toBe(SYSTEM_PROMPT);
+  });
+
+  it("מעבר מ-Claude ל-OpenAI באמצע חישוב: OpenAI ממשיך עם המזהים שלנו", async () => {
+    const ctx = makeCtx();
+    const c = fakeClaude([cReply([cCall("toolu_1", "save_employee_profile", { group: "ג" })], "tool_use"), oError(429)]);
+    const q = fakeGroq([oReply("שמרתי.")]);
+
+    const r = await runTurn(ctx, "קבוצה ג", freeOptions([c.provider, q.provider]));
+    expect(r.via).toEqual(["Claude", "Groq"]);
+    const msgs = q.requests[0].messages;
+    expect(msgs[3].tool_call_id).toBe(msgs[2].tool_calls[0].id);
+    expect(msgs[2].tool_calls[0].id).not.toBe("toolu_1");
+  });
+
+  it("קריאות לכלים שספק אחר כתב מגיעות ל-Claude כטקסט", async () => {
+    const ctx = makeCtx();
+    const q = fakeGroq([oReply(null, [{ name: "list_catalog", args: {} }]), oReply("הנה הקטלוג")]);
+    await runTurn(ctx, "קבוצה ג", freeOptions([q.provider]));
+
+    const msgs = toClaudeMessages(ctx.session.log);
+    expect(msgs.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
+    expect((msgs[1]!.content as any)[0].text).toBe("[קריאה לכלי list_catalog עם הקלט {}]");
+    const all = JSON.stringify(msgs);
+    expect(all).not.toContain("tool_use");
+    expect(all).not.toContain("tool_result");
+  });
+
+  it("סירוב של Claude לא נשמר", async () => {
+    const ctx = makeCtx();
+    const c = fakeClaude([cReply([], "refusal")]);
+    const r = await runTurn(ctx, "שלום", freeOptions([c.provider]));
+    expect(r.status).toBe("refused");
+    expect(ctx.session.log.filter((e) => e.role === "model")).toHaveLength(0);
+  });
+
+  it("תקלות של Claude מסווגות כמו של כל ספק", () => {
+    const err = (status: number) => Anthropic.APIError.generate(status, { error: { message: "x" } }, "x", new Headers());
+    expect(classifyProviderError(err(429))).toBe("rate");
+    expect(classifyProviderError(err(529))).toBe("server");
+    expect(classifyProviderError(err(401))).toBe("auth");
+    expect(classifyProviderError(new Anthropic.APIConnectionError({ message: "down" }))).toBe("server");
+  });
+
+  it("OpenAI ו-Claude נכנסים לשרשרת כגיבוי, ו-LLM_PROVIDER עם כמה שמות מקדים אותם לפי הסדר", () => {
+    const keys = { GEMINI_API_KEY: "g", OPENROUTER_API_KEY: "o", OPENAI_API_KEY: "p", ANTHROPIC_API_KEY: "a" };
+    expect(createFreeProviders(keys).map((p) => p.name)).toEqual(["gemini", "openrouter", "openai", "claude"]);
+    expect(createFreeProviders({ ...keys, LLM_PROVIDER: "claude,openai" }).map((p) => p.name)).toEqual([
+      "claude", "openai", "gemini", "openrouter",
+    ]);
+    expect(createFreeProviders({ ...keys, LLM_PROVIDER: " OpenAI " }).map((p) => p.name)).toEqual([
+      "openai", "gemini", "openrouter", "claude",
+    ]);
+    const models = Object.fromEntries(createFreeProviders(keys).map((p) => [p.name, p.model]));
+    expect(models.openai).toBe("gpt-5.5");
+    expect(models.claude).toBe("claude-opus-5-5");
+  });
+
+  it("מצב השרשרת: OpenAI לבד מספיק, Claude לבד נשאר במצב שלו, ו-claude,openai הוא שרשרת", () => {
+    expect(resolveMode({ OPENAI_API_KEY: "p" })).toBe("free");
+    expect(resolveMode({ ANTHROPIC_API_KEY: "a" })).toBe("claude");
+    expect(resolveMode({ OPENAI_API_KEY: "p", ANTHROPIC_API_KEY: "a", LLM_PROVIDER: "claude,openai" })).toBe("free");
+    expect(resolveMode({ OPENAI_API_KEY: "p", ANTHROPIC_API_KEY: "a", LLM_PROVIDER: "claude" })).toBe("claude");
   });
 });

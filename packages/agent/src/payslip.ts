@@ -6,8 +6,17 @@
  */
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { DEFAULT_CLAUDE_MODEL } from "./claude";
-import { DEFAULT_GEMINI_MODEL, DEFAULT_OPENROUTER_MODELS, OPENROUTER_BASE_URL, type GeminiClient } from "./free";
+import {
+  DEFAULT_GEMINI_MODEL,
+  DEFAULT_OPENAI_MODEL,
+  DEFAULT_OPENROUTER_MODELS,
+  OPENROUTER_BASE_URL,
+  orderByPreference,
+  type GeminiClient,
+  type OpenAICompatClient,
+} from "./free";
 
 export const PAYSLIP_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"] as const;
 export const PAYSLIP_MAX_BYTES = 8 * 1024 * 1024;
@@ -245,6 +254,8 @@ export interface PayslipFile {
 
 /** ספק שיודע לקרוא תלוש. מחזיר רק את מה שמודפס, בלי חישובים. */
 export interface PayslipSource {
+  /** כמו בשרשרת הבוט, בשביל הסדר לפי LLM_PROVIDER */
+  name: string;
   label: string;
   read(file: PayslipFile): Promise<unknown>;
 }
@@ -262,6 +273,7 @@ export class PayslipReadError extends Error {
 /** Gemini קורא PDF ותמונות בעצמו, ומחזיר JSON לפי הסכמה */
 export function geminiPayslipSource(client: GeminiClient, model: string): PayslipSource {
   return {
+    name: "gemini",
     label: "Gemini",
     async read(file) {
       const response = await client.models.generateContent({
@@ -292,6 +304,7 @@ export function openRouterPayslipSource(
   timeoutMs = 90_000,
 ): PayslipSource {
   return {
+    name: "openrouter",
     label: "OpenRouter",
     async read(file) {
       const pdf = file.mimeType === "application/pdf";
@@ -327,6 +340,7 @@ const CLAUDE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "ima
  */
 export function claudePayslipSource(client: Pick<Anthropic, "messages">, model: string = DEFAULT_CLAUDE_MODEL): PayslipSource {
   return {
+    name: "claude",
     label: "Claude",
     async read(file) {
       const isPdf = file.mimeType === "application/pdf";
@@ -360,6 +374,35 @@ export function claudePayslipSource(client: Pick<Anthropic, "messages">, model: 
       const toolUse = response.content.find((b): b is Anthropic.Messages.ToolUseBlock => b.type === "tool_use");
       if (!toolUse) throw new PayslipProviderError("לא החזיר תשובה מובנית");
       return toolUse.input;
+    },
+  };
+}
+
+/** תמונות ש-OpenAI קורא ישירות. HEIC לא נתמך - נופל לספק הבא. */
+const OPENAI_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+/** OpenAI: קורא PDF ותמונות בעצמו, ומחזיר JSON לפי הסכמה */
+export function openAIPayslipSource(client: OpenAICompatClient, model: string = DEFAULT_OPENAI_MODEL): PayslipSource {
+  return {
+    name: "openai",
+    label: "OpenAI",
+    async read(file) {
+      const pdf = file.mimeType === "application/pdf";
+      if (!pdf && !OPENAI_IMAGE_TYPES.has(file.mimeType)) {
+        throw new PayslipProviderError(`לא תומך בפורמט ${file.mimeType}`);
+      }
+      const attachment: OpenAI.Chat.Completions.ChatCompletionContentPart = pdf
+        ? { type: "file", file: { filename: "payslip.pdf", file_data: `data:application/pdf;base64,${file.data}` } }
+        : { type: "image_url", image_url: { url: `data:${file.mimeType};base64,${file.data}` } };
+      const response = await client.chat.completions.create({
+        model,
+        messages: [{ role: "user", content: [{ type: "text", text: PAYSLIP_PROMPT }, attachment] }],
+        // strict: false, כי הסכמה לא כוללת additionalProperties שמצב strict דורש
+        response_format: { type: "json_schema", json_schema: { name: "payslip", schema: PAYSLIP_SCHEMA, strict: false } },
+      });
+      const content = response.choices[0]?.message.content;
+      if (!content) throw new PayslipProviderError("לא החזיר תשובה");
+      return parseModelJson(content);
     },
   };
 }
@@ -402,7 +445,10 @@ export async function readPayslipFrom(sources: PayslipSource[], file: PayslipFil
 
 export type PayslipReader = (file: PayslipFile) => Promise<PayslipReading>;
 
-/** קורא תלושים לפי המפתחות שבסביבה: Gemini, ואם הוא לא עונה, OpenRouter, ואם יש מפתח Claude גם הוא. null כשאין אף מפתח מתאים. */
+/**
+ * קורא תלושים לפי המפתחות שבסביבה: Gemini, ואם הוא לא עונה, OpenRouter, ואחריהם OpenAI ו-Claude אם יש להם מפתח.
+ * LLM_PROVIDER קובע מי ראשון, כמו בבוט. null כשאין אף מפתח מתאים.
+ */
 export function payslipReaderFromEnv(env: Record<string, string | undefined>): PayslipReader | null {
   const sources: PayslipSource[] = [];
   if (env.GEMINI_API_KEY) {
@@ -413,9 +459,14 @@ export function payslipReaderFromEnv(env: Record<string, string | undefined>): P
     const models = env.OPENROUTER_MODEL?.split(",").map((m) => m.trim()).filter(Boolean);
     sources.push(openRouterPayslipSource(env.OPENROUTER_API_KEY, models?.length ? models : DEFAULT_OPENROUTER_MODELS));
   }
+  if (env.OPENAI_API_KEY) {
+    const client = new OpenAI({ apiKey: env.OPENAI_API_KEY, maxRetries: 0, timeout: 90_000 });
+    sources.push(openAIPayslipSource(client, env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL));
+  }
   if (env.ANTHROPIC_API_KEY) {
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
     sources.push(claudePayslipSource(client, env.CLAUDE_MODEL || DEFAULT_CLAUDE_MODEL));
   }
-  return sources.length ? (file) => readPayslipFrom(sources, file) : null;
+  const ordered = orderByPreference(sources, env.LLM_PROVIDER);
+  return ordered.length ? (file) => readPayslipFrom(ordered, file) : null;
 }

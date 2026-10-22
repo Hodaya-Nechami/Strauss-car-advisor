@@ -1,19 +1,18 @@
 /**
  * נקודת הכניסה של הבוט, בלי תלות במודל.
- * free: שרשרת ספקים חינמיים (Gemini, Cohere, Mistral, OpenRouter, Groq) שמחליפים זה את זה כשהמכסה נגמרת.
- * claude: Claude בתשלום. נבחר רק אם הוגדר לו מפתח ואין מפתחות חינמיים, או אם LLM_PROVIDER=claude.
+ * free: שרשרת ספקים (Gemini, Cohere, Mistral, OpenRouter, Groq, ואם יש מפתחות גם OpenAI ו-Claude)
+ *   שמחליפים זה את זה כשאחד נכשל. LLM_PROVIDER קובע מי ראשון, למשל "claude,openai".
+ * claude: רק Claude, בלי גיבוי. נבחר אם יש רק מפתח של Claude, או אם LLM_PROVIDER=claude בדיוק.
  * בכל המצבים: אותם כלים ואותו מנוע.
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { ApiError as GeminiApiError } from "@google/genai";
 import {
-  DEFAULT_EFFORT,
-  EFFORTS,
   appendClaudeRepAnswer,
   continueClaude,
   createClaudeClient,
+  effortFromEnv,
   type ClaudeOptions,
-  type Effort,
 } from "./claude";
 import {
   AllProvidersFailedError,
@@ -93,12 +92,20 @@ export async function resumeWithRepAnswer(
   return continueClaude(ctx, opts);
 }
 
-const FREE_KEYS = ["GEMINI_API_KEY", "COHERE_API_KEY", "MISTRAL_API_KEY", "OPENROUTER_API_KEY", "GROQ_API_KEY"] as const;
+/** מפתחות שמפעילים את השרשרת. Claude לבד לא ברשימה: בלי ספק אחר, הוא עובד במצב שלו. */
+const CHAIN_KEYS = [
+  "GEMINI_API_KEY",
+  "COHERE_API_KEY",
+  "MISTRAL_API_KEY",
+  "OPENROUTER_API_KEY",
+  "GROQ_API_KEY",
+  "OPENAI_API_KEY",
+] as const;
 
-/** באיזה מצב לעבוד לפי הסביבה. מפתחות חינמיים קודמים ל-Claude, אלא אם LLM_PROVIDER=claude. */
+/** באיזה מצב לעבוד לפי הסביבה. כשיש מפתח לשרשרת, Claude נכנס אליה, אלא אם LLM_PROVIDER=claude בדיוק. */
 export function resolveMode(env: Record<string, string | undefined>): Mode | null {
   if (env.LLM_PROVIDER?.trim().toLowerCase() === "claude") return "claude";
-  if (FREE_KEYS.some((k) => env[k])) return "free";
+  if (CHAIN_KEYS.some((k) => env[k])) return "free";
   if (env.ANTHROPIC_API_KEY) return "claude";
   return null;
 }
@@ -118,8 +125,7 @@ export function createAgentOptionsFromEnv(env: Record<string, string | undefined
     if (!env.ANTHROPIC_API_KEY) {
       throw new MissingApiKeyError("LLM_PROVIDER מוגדר ל-claude, אבל חסר ANTHROPIC_API_KEY בקובץ apps/web/.env.");
     }
-    const effort = EFFORTS.includes(env.CLAUDE_EFFORT as Effort) ? (env.CLAUDE_EFFORT as Effort) : DEFAULT_EFFORT;
-    return { mode: "claude", client: createClaudeClient(), model: env.CLAUDE_MODEL || undefined, effort };
+    return { mode: "claude", client: createClaudeClient(), model: env.CLAUDE_MODEL || undefined, effort: effortFromEnv(env.CLAUDE_EFFORT) };
   }
   throw new MissingApiKeyError(NO_KEY_HELP);
 }
@@ -137,13 +143,13 @@ export function describeAgentError(err: unknown): { status: number; message: str
   if (err instanceof MissingApiKeyError) return { status: 503, message: err.message };
   if (err instanceof ProviderMismatchError) return { status: 409, message: err.message };
 
-  // שרשרת הספקים החינמיים
+  // שרשרת הספקים
   if (err instanceof AllProvidersFailedError) {
     if (err.failures.every((f) => f.kind === "rate")) {
       const names = err.failures.map((f) => f.provider).join(", ");
       return {
         status: 429,
-        message: `כל המפתחות החינמיים הגיעו למכסה כרגע (${names}). חכו דקה ונסו שוב. אם נגמרה המכסה היומית, היא מתחדשת מחר.`,
+        message: `כל המפתחות הגיעו למכסה כרגע (${names}). חכו דקה ונסו שוב. אם נגמרה המכסה היומית, היא מתחדשת מחר.`,
       };
     }
     const details = err.failures

@@ -1,5 +1,5 @@
 /**
- * שרשרת הספקים החינמיים: Gemini, Cohere, Mistral, OpenRouter ו-Groq.
+ * שרשרת הספקים: החינמיים Gemini, Cohere, Mistral, OpenRouter ו-Groq, ואם יש מפתחות, גם OpenAI ו-Claude בתשלום.
  *
  * - ההיסטוריה נשמרת בפורמט שלנו (session.log), ומתורגמת לפורמט של כל ספק בכל בקשה.
  *   לכן אפשר לעבור ספק באמצע שיחה, ואפילו באמצע חישוב.
@@ -7,15 +7,17 @@
  *   כשזמן ההמתנה עובר, חוזרים אליו לפי הסדר.
  * - מפתח אחד לכל ספק. לא מחליפים בין כמה מפתחות של אותו ספק כדי לעקוף את המכסה שלו.
  */
+import Anthropic from "@anthropic-ai/sdk";
 import { ApiError as GeminiApiError, FinishReason, GoogleGenAI, ThinkingLevel, type Content, type Part } from "@google/genai";
 import OpenAI from "openai";
+import { DEFAULT_CLAUDE_MODEL, DEFAULT_EFFORT, createClaudeMessage, effortFromEnv, type ClaudeClient, type Effort } from "./claude";
 import { SYSTEM_PROMPT } from "./prompt";
 import { geminiFunctionDeclarations, openAITools } from "./schemas";
 import type { LogEntry, LoggedCall, LoggedResult, RepAnswerRecord } from "./session";
 import type { ToolContext } from "./tools";
 import { TurnCollector, type TurnResult } from "./turn";
 
-export type FreeProviderName = "gemini" | "cohere" | "mistral" | "openrouter" | "groq";
+export type FreeProviderName = "gemini" | "cohere" | "mistral" | "openrouter" | "groq" | "openai" | "claude";
 
 /** תשובת מודל אחרי נרמול: אותה צורה מכל ספק */
 export interface ModelReply {
@@ -23,6 +25,7 @@ export interface ModelReply {
   calls: LoggedCall[];
   finish: "stop" | "tool_calls" | "length" | "blocked" | "malformed";
   geminiParts?: Part[];
+  claudeContent?: Anthropic.Beta.BetaContentBlockParam[];
 }
 
 export interface FreeProvider {
@@ -151,13 +154,87 @@ export function geminiProvider(
   };
 }
 
-/* ------------------ Cohere, Mistral, OpenRouter ו-Groq (פורמט OpenAI) ------------------ */
+/* ------------------------------ Claude ------------------------------ */
+
+/**
+ * ההיסטוריה בפורמט של Claude, באותה שיטה כמו ב-Gemini.
+ * תשובות ש-Claude כתב נשלחות בדיוק כמו שהתקבלו, כולל בלוקי החשיבה.
+ * קריאות לכלים שספק אחר כתב נשלחות כטקסט רגיל, כי אין להן בלוק חשיבה מקורי.
+ */
+export function toClaudeMessages(log: LogEntry[]): Anthropic.Beta.BetaMessageParam[] {
+  const messages: Anthropic.Beta.BetaMessageParam[] = [];
+  let lastModel: Extract<LogEntry, { role: "model" }> | undefined;
+  for (const entry of log) {
+    if (entry.role === "user") {
+      messages.push({ role: "user", content: entry.text });
+    } else if (entry.role === "model") {
+      lastModel = entry;
+      messages.push({
+        role: "assistant",
+        content: entry.claudeContent ?? [
+          ...(entry.text ? [{ type: "text" as const, text: entry.text }] : []),
+          ...entry.calls.map((c) => ({ type: "text" as const, text: `[קריאה לכלי ${c.name} עם הקלט ${JSON.stringify(c.args)}]` })),
+        ],
+      });
+    } else if (lastModel?.claudeContent) {
+      const model = lastModel;
+      messages.push({
+        role: "user",
+        content: entry.results.map((r) => ({
+          type: "tool_result" as const,
+          tool_use_id: model.calls.find((c) => c.id === r.id)?.providerId ?? r.id,
+          content: JSON.stringify(r.output),
+          ...(typeof r.output.error === "string" ? { is_error: true } : {}),
+        })),
+      });
+    } else {
+      messages.push({
+        role: "user",
+        content: entry.results.map((r) => ({ type: "text" as const, text: `[תוצאת הכלי ${r.name}: ${JSON.stringify(r.output)}]` })),
+      });
+    }
+  }
+  return messages;
+}
+
+export function claudeProvider(client: ClaudeClient, model = DEFAULT_CLAUDE_MODEL, effort: Effort = DEFAULT_EFFORT): FreeProvider {
+  return {
+    name: "claude",
+    label: "Claude",
+    model,
+    async generate(log, newCallId) {
+      const response = await createClaudeMessage(client, model, effort, toClaudeMessages(log));
+      if (response.stop_reason === "refusal") return { calls: [], finish: "blocked" };
+
+      const calls: LoggedCall[] = [];
+      const texts: string[] = [];
+      for (const block of response.content) {
+        if (block.type === "text") texts.push(block.text);
+        if (block.type === "tool_use") {
+          calls.push({ id: newCallId(), providerId: block.id, name: block.name, args: (block.input ?? {}) as Record<string, unknown> });
+        }
+      }
+      const text = texts.join("").trim();
+      return {
+        ...(text ? { text } : {}),
+        calls,
+        finish: response.stop_reason === "max_tokens" ? "length" : calls.length ? "tool_calls" : "stop",
+        claudeContent: response.content,
+      };
+    },
+  };
+}
+
+/* ------------------ OpenAI, Cohere, Mistral, OpenRouter ו-Groq (פורמט OpenAI) ------------------ */
 
 export type OpenAICompatClient = Pick<OpenAI, "chat">;
+export const OPENAI_BASE_URL = "https://api.openai.com/v1";
 export const COHERE_BASE_URL = "https://api.cohere.ai/compatibility/v1";
 export const MISTRAL_BASE_URL = "https://api.mistral.ai/v1";
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
+/** בלי reasoning_effort: ב-chat completions, OpenAI לא מאפשר אותו יחד עם כלים (נבדק ב-22.10.2026). */
+export const DEFAULT_OPENAI_MODEL = "gpt-5.5";
 export const DEFAULT_COHERE_MODEL = "command-a-plus-05-2026";
 export const DEFAULT_MISTRAL_MODEL = "mistral-medium-latest";
 export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
@@ -199,7 +276,7 @@ export function toOpenAIMessages(log: LogEntry[]): OpenAI.Chat.Completions.ChatC
 }
 
 export function openAICompatProvider(
-  name: Exclude<FreeProviderName, "gemini">,
+  name: Exclude<FreeProviderName, "gemini" | "claude">,
   label: string,
   client: OpenAICompatClient,
   model: string,
@@ -280,6 +357,8 @@ export function classifyProviderError(err: unknown): FailureKind | null {
     return parseGeminiError(err.message).reasons.includes("API_KEY_INVALID") ? "auth" : kindByStatus(err.status);
   }
   if (err instanceof OpenAI.APIError) return typeof err.status === "number" ? kindByStatus(err.status) : "server";
+  // כולל תקלת רשת וזמן שעבר, שאין להן קוד
+  if (err instanceof Anthropic.APIError) return typeof err.status === "number" ? kindByStatus(err.status) : "server";
   // תקלת רשת (fetch failed)
   if (err instanceof TypeError && /fetch/i.test(err.message)) return "server";
   // גיבוי: אם ה-instanceof נכשל (למשל כשהבאנדל של Next.js טוען עותק נפרד של @google/genai,
@@ -352,7 +431,7 @@ export function providerErrorDetail(err: unknown): string {
 
 export class AllProvidersFailedError extends Error {
   constructor(readonly failures: ProviderFailure[]) {
-    super(`All free providers failed: ${failures.map((f) => `${f.provider}=${f.kind}`).join(", ")}`);
+    super(`All providers failed: ${failures.map((f) => `${f.provider}=${f.kind}`).join(", ")}`);
   }
 }
 
@@ -439,6 +518,7 @@ export async function continueFree(ctx: ToolContext, opts: FreeOptions): Promise
       ...(reply.text ? { text: reply.text } : {}),
       calls: reply.calls,
       ...(reply.geminiParts ? { geminiParts: reply.geminiParts } : {}),
+      ...(reply.claudeContent ? { claudeContent: reply.claudeContent } : {}),
     });
     if (reply.text) turn.addText(reply.text);
     if (reply.calls.length === 0) return turn.finish(reply.finish === "length" ? "truncated" : "done");
@@ -460,8 +540,18 @@ const list = (value: string | undefined, fallback: string[]) => {
 };
 
 /**
- * הספקים שיש להם מפתח, לפי הסדר: Gemini, Cohere, Mistral, OpenRouter, Groq.
- * LLM_PROVIDER יכול להקדים אחד מהם.
+ * LLM_PROVIDER: מי ראשון בתור. אפשר כמה, מופרדים בפסיקים, למשל "claude,openai".
+ * השאר באים אחריהם בסדר הרגיל.
+ */
+export function orderByPreference<T extends { name: string }>(items: T[], preference: string | undefined): T[] {
+  const first = list(preference?.toLowerCase(), []);
+  const rank = (item: T) => (first.includes(item.name) ? first.indexOf(item.name) : first.length);
+  return [...items].sort((a, b) => rank(a) - rank(b));
+}
+
+/**
+ * הספקים שיש להם מפתח, לפי הסדר: Gemini, Cohere, Mistral, OpenRouter, Groq,
+ * ואחריהם, כגיבוי בתשלום, OpenAI ו-Claude. LLM_PROVIDER יכול להקדים חלק מהם.
  */
 export function createFreeProviders(env: Record<string, string | undefined>): FreeProvider[] {
   const providers: FreeProvider[] = [];
@@ -490,6 +580,13 @@ export function createFreeProviders(env: Record<string, string | undefined>): Fr
     const client = compat(env.GROQ_API_KEY, GROQ_BASE_URL);
     providers.push(openAICompatProvider("groq", "Groq", client, env.GROQ_MODEL || DEFAULT_GROQ_MODEL));
   }
-  const first = env.LLM_PROVIDER?.trim().toLowerCase();
-  return [...providers.filter((p) => p.name === first), ...providers.filter((p) => p.name !== first)];
+  if (env.OPENAI_API_KEY) {
+    const client = compat(env.OPENAI_API_KEY, OPENAI_BASE_URL);
+    providers.push(openAICompatProvider("openai", "OpenAI", client, env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL));
+  }
+  if (env.ANTHROPIC_API_KEY) {
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 0, timeout: REQUEST_TIMEOUT_MS });
+    providers.push(claudeProvider(client, env.CLAUDE_MODEL || DEFAULT_CLAUDE_MODEL, effortFromEnv(env.CLAUDE_EFFORT)));
+  }
+  return orderByPreference(providers, env.LLM_PROVIDER);
 }

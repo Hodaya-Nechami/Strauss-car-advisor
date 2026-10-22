@@ -181,13 +181,19 @@ export const tools = {
     schema: z.object({}),
     run: async (_input, ctx) => {
       const r = ctx.rules;
+      // בלי רשימת הרכבים, מודל עלול להציע רכב רגיל מהקבוצה כרכב "משפחתי"
+      const familyCars = ctx.catalog
+        .filter((c) => r.familyTrack.cars.includes(c.id))
+        .map((c) => `${c.manufacturer} ${c.model}`)
+        .join(", ");
       return {
         ok: true,
         budgets: r.budgets,
         chooseFrom: "אפשר לבחור רכב מהקבוצה שלך או מקבוצה נמוכה ממנה, לא מקבוצה גבוהה",
         electric: `רכב חשמלי מקבל החזר חשמל של ${r.electric.netBonus} ₪ ${r.electric.method === "gross_up" ? "נטו (מגולם)" : "ברוטו"} בחודש`,
         electricDrives: r.electric.eligibleDrives ?? ["חשמלי"],
-        familyTrack: `מסלול ברוכת ילדים: ${r.familyTrack.minChildren} ילדים ומעלה עד גיל ${r.familyTrack.childMaxAge}. על הפער מעל תקציב הקבוצה העובד משלם ${Math.round(r.familyTrack.gapSplitEmployee * 100)}% והמעסיק את השאר`,
+        familyTrack: `מסלול ברוכת ילדים: ${r.familyTrack.minChildren} ילדים ומעלה עד גיל ${r.familyTrack.childMaxAge}. על הפער מעל תקציב הקבוצה העובד משלם ${Math.round(r.familyTrack.gapSplitEmployee * 100)}% והמעסיק את השאר. ` +
+          `הרכבים של המסלול הם רק אלה: ${familyCars}. רכב רגיל מהקבוצה של העובד אינו רכב של המסלול`,
         waiver: "ויתור על רכב רק בעיסוקים שמאפשרים זאת. במקום רכב מקבלים אחזקת רכב לפי טבלת העיסוקים. האחזקה חייבת במס ולא נכנסת לפנסיה",
         unusedBudget: "תקציב רכב שלא נוצל לא הופך לכסף בשכר",
       };

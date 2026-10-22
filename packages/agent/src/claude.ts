@@ -17,6 +17,11 @@ export const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 export const DEFAULT_CLAUDE_MODEL = "claude-opus-5-5";
 export const DEFAULT_EFFORT: Effort = "medium";
 
+/** CLAUDE_EFFORT מהסביבה, או ברירת המחדל אם הערך לא מוכר */
+export function effortFromEnv(value: string | undefined): Effort {
+  return EFFORTS.includes(value as Effort) ? (value as Effort) : DEFAULT_EFFORT;
+}
+
 /**
  * server-side-fallback: אם מסנן הבטיחות של המודל דוחה בקשה תמימה בטעות, השרת מנסה מודל חלופי במקום להחזיר סירוב.
  * thinking-binding-controls: מאפשר לבקש drop_block, כך ששינוי בהנחיות בין גרסאות לא מפיל שיחות שמורות.
@@ -46,28 +51,38 @@ export function appendClaudeRepAnswer(ctx: ToolContext, answer: RepAnswerRecord)
   ctx.session.messages.push({ role: "system", content: repAnswerSystemMessage(answer, answer.answer) });
 }
 
+/** בקשה אחת ל-Claude, עם ההנחיות והכלים. משותפת למצב Claude ולשרשרת הספקים. */
+export async function createClaudeMessage(
+  client: ClaudeClient,
+  model: string,
+  effort: Effort,
+  messages: Anthropic.Beta.BetaMessageParam[],
+) {
+  const response = await client.beta.messages.create({
+    model,
+    max_tokens: 16000,
+    betas: BETAS,
+    fallbacks: "default",
+    thinking: { type: "adaptive", block_binding: { prefix_mismatch_behavior: "drop_block" } },
+    output_config: { effort },
+    cache_control: { type: "ephemeral" },
+    system: SYSTEM_PROMPT,
+    tools: toolDefinitions,
+    messages,
+  });
+  if (response.input_transformations?.length) {
+    console.warn("[agent] Claude dropped thinking blocks:", JSON.stringify(response.input_transformations));
+  }
+  return response;
+}
+
 export async function continueClaude(ctx: ToolContext, opts: ClaudeOptions): Promise<TurnResult> {
   const { client, model = DEFAULT_CLAUDE_MODEL, effort = DEFAULT_EFFORT, maxToolRounds = 8 } = opts;
   const messages = ctx.session.messages;
   const turn = new TurnCollector(ctx);
 
   for (let round = 0; round <= maxToolRounds; round++) {
-    const response = await client.beta.messages.create({
-      model,
-      max_tokens: 16000,
-      betas: BETAS,
-      fallbacks: "default",
-      thinking: { type: "adaptive", block_binding: { prefix_mismatch_behavior: "drop_block" } },
-      output_config: { effort },
-      cache_control: { type: "ephemeral" },
-      system: SYSTEM_PROMPT,
-      tools: toolDefinitions,
-      messages,
-    });
-
-    if (response.input_transformations?.length) {
-      console.warn("[agent] Claude dropped thinking blocks:", JSON.stringify(response.input_transformations));
-    }
+    const response = await createClaudeMessage(client, model, effort, messages);
 
     turn.answeredBy("Claude");
     // סירוב: לא מוסיפים את התשובה להיסטוריה ולא מריצים כלים

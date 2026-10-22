@@ -91,6 +91,7 @@ describe("קריאת תלוש שכר", () => {
 
   it("Gemini לא עונה: OpenRouter קורא את ה-PDF דרך מפענח הטקסט החינמי", async () => {
     const slowGemini: PayslipSource = {
+      name: "gemini",
       label: "Gemini",
       read: async () => {
         throw Object.assign(new Error("Deadline expired"), { status: 504 });
@@ -126,7 +127,7 @@ describe("קריאת תלוש שכר", () => {
 
   it("כל הספקים נכשלו: הודעה בעברית עם הסיבה של כל אחד", async () => {
     const busy = (async () => new Response("{}", { status: 429 })) as unknown as typeof fetch;
-    const down: PayslipSource = { label: "Gemini", read: async () => Promise.reject(Object.assign(new Error("x"), { status: 503 })) };
+    const down: PayslipSource = { name: "gemini", label: "Gemini", read: async () => Promise.reject(Object.assign(new Error("x"), { status: 503 })) };
     await expect(readPayslipFrom([down, openRouterPayslipSource("key", ["m"], busy)], file)).rejects.toThrow(
       "לא הצלחתי לקרוא את התלוש כרגע (Gemini: לא ענה בזמן; OpenRouter: עמוס או הגיע למכסה)",
     );
@@ -159,7 +160,7 @@ describe("קריאת תלוש שכר", () => {
   it("Claude לא תומך ב-HEIC: נכשל מיד ועובר לספק הבא בלי לשלוח בקשה", async () => {
     let called = false;
     const client = { messages: { create: async () => ((called = true), { content: [] }) } } as any;
-    const next: PayslipSource = { label: "next", read: async () => printed() };
+    const next: PayslipSource = { name: "next", label: "next", read: async () => printed() };
 
     const r = await readPayslipFrom([claudePayslipSource(client, "claude-test"), next], {
       data: "QUJD",
@@ -171,7 +172,7 @@ describe("קריאת תלוש שכר", () => {
 
   it("מסמך שאינו תלוש עוצר מיד, בלי לשלוח אותו לספק נוסף", async () => {
     let calls = 0;
-    const source = (): PayslipSource => ({ label: "x", read: async () => (calls++, { isPayslip: false }) });
+    const source = (): PayslipSource => ({ name: "x", label: "x", read: async () => (calls++, { isPayslip: false }) });
     await expect(readPayslipFrom([source(), source()], file)).rejects.toThrow(NotAPayslipError);
     expect(calls).toBe(1);
   });

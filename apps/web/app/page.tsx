@@ -39,9 +39,16 @@ function writeSessionId(id: string | null) {
   }
 }
 
-/** מציג **הדגשה** מהבוט כטקסט מודגש, ושורות שמתחילות ב-* או ב-- כנקודות. בלי להריץ HTML. */
+/**
+ * מציג **הדגשה** מהבוט כטקסט מודגש, ושורות שמתחילות ב-* או ב-- כנקודות. בלי להריץ HTML:
+ * מודל שכותב בכל זאת <strong> או <b> מקבל הדגשה רגילה, ותגיות אחרות נמחקות.
+ */
 function renderText(text: string): ReactNode[] {
-  const bulleted = text.replace(/^(\s*)[*-]\s+/gm, "$1• ");
+  const plain = text
+    .replace(/<\/?(?:strong|b)>/gi, "**")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?[a-z][^>]*>/gi, "");
+  const bulleted = plain.replace(/^(\s*)[*-]\s+/gm, "$1• ");
   return bulleted.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
     part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : part,
   );

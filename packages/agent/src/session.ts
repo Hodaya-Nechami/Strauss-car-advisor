@@ -2,7 +2,10 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { Part } from "@google/genai";
 import type { EmployeeProfile } from "@strauss/engine";
 
-/** claude: מודל אחד בתשלום. free: שרשרת של ספקים חינמיים שמחליפים זה את זה כשהמכסה נגמרת. */
+/**
+ * claude: רק Claude, בפורמט שלו. free: שרשרת ספקים שמחליפים זה את זה כשאחד נכשל.
+ * בשרשרת יש בעיקר חינמיים, ואפשר להוסיף לה גם את OpenAI ואת Claude בתשלום. השם "free" נשאר כי הוא שמור בשיחות קיימות.
+ */
 export type Mode = "claude" | "free";
 
 export interface RepQuestionRecord {
@@ -19,7 +22,7 @@ export interface RepAnswerRecord extends RepQuestionRecord {
 export interface LoggedCall {
   /** מזהה פנימי, אחיד לכל הספקים */
   id: string;
-  /** המזהה המקורי מ-Gemini, אם נתן כזה */
+  /** המזהה המקורי מ-Gemini או מ-Claude, אם נתן כזה */
   providerId?: string;
   name: string;
   args: Record<string, unknown>;
@@ -45,6 +48,8 @@ export type LogEntry =
       calls: LoggedCall[];
       /** התשובה המקורית של Gemini, כולל חתימות החשיבה. נשלחת חזרה ל-Gemini בדיוק כמו שהתקבלה. */
       geminiParts?: Part[];
+      /** התשובה המקורית של Claude, כולל בלוקי החשיבה. נשלחת חזרה ל-Claude בדיוק כמו שהתקבלה. */
+      claudeContent?: Anthropic.Beta.BetaContentBlockParam[];
     }
   | { role: "tools"; results: LoggedResult[] };
 
@@ -63,7 +68,7 @@ export interface SessionState {
   repAnswers: RepAnswerRecord[];
   /** ההיסטוריה של Claude, בפורמט שלו */
   messages: Anthropic.Beta.BetaMessageParam[];
-  /** ההיסטוריה של הספקים החינמיים, בפורמט שלנו */
+  /** ההיסטוריה של שרשרת הספקים, בפורמט שלנו */
   log: LogEntry[];
 }
 
