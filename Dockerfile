@@ -32,5 +32,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 COPY --from=build /app /app
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 EXPOSE 3000
-CMD ["npm", "run", "start", "-w", "apps/web"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

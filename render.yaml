@@ -1,11 +1,11 @@
-# Render Blueprint: פריסת apps/web מה-Dockerfile הקיים, עם disk מתמיד ל-SQLite
-# (מקביל ל-volume strauss_data ב-docker-compose.yml).
+# Render Blueprint: פריסת apps/web מה-Dockerfile הקיים, בתוכנית החינמית.
+#
+# בלי disk מתמיד (דורש תוכנית בתשלום): ה-DB של מאגר שווי השימוש נבנה מחדש
+# אוטומטית מה-CSV בכל עליה של הקונטיינר (docker-entrypoint.sh). היסטוריית
+# שיחות (chats.db) לא שורדת restart/redeploy בתוכנית הזו.
 #
 # שימוש: ב-Render dashboard -> New -> Blueprint -> לבחור את הריפו והענף הזה.
 # מפתחות (GEMINI_API_KEY וכו') צריך למלא ידנית ב-dashboard אחרי היצירה (sync: false).
-#
-# ייבוא ראשוני של מאגר שווי השימוש: אחרי שהשירות עולה בפעם הראשונה, ב-tab "Shell"
-# בדשבורד מריצים פעם אחת: npm run data:import
 
 services:
   - type: web
@@ -13,7 +13,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    plan: starter
+    plan: free
     region: frankfurt
     branch: nechami/n9-docker-deploy
     envVars:
@@ -35,7 +35,3 @@ services:
         sync: false
       - key: REP_PASSWORD
         sync: false
-    disk:
-      name: strauss-data
-      mountPath: /app/.data
-      sizeGB: 1
