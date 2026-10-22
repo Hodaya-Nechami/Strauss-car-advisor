@@ -321,7 +321,10 @@ export function openRouterPayslipSource(
 /** תמונות שClaude קורא ישירות. HEIC לא נתמך - נופל לספק הבא. */
 const CLAUDE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
-/** Claude: קורא PDF ותמונות בעצמו, ומחזיר JSON מובנה דרך כלי יחיד עם tool_choice כפוי */
+/**
+ * Claude: קורא PDF ותמונות בעצמו, ומחזיר JSON מובנה דרך כלי יחיד.
+ * tool_choice מסוג "tool" (כפוי) לא נתמך במודל הזה - "auto" עם הנחיה מפורשת בפרומפט במקום.
+ */
 export function claudePayslipSource(client: Pick<Anthropic, "messages">, model: string = DEFAULT_CLAUDE_MODEL): PayslipSource {
   return {
     label: "Claude",
@@ -340,10 +343,11 @@ export function claudePayslipSource(client: Pick<Anthropic, "messages">, model: 
               data: file.data,
             },
           };
+      const ask = `${PAYSLIP_PROMPT}\nהחזר את התשובה אך ורק דרך קריאה לכלי report_payslip, בלי טקסט חופשי.`;
       const response = await client.messages.create({
         model,
         max_tokens: 2000,
-        messages: [{ role: "user", content: [block, { type: "text", text: PAYSLIP_PROMPT }] }],
+        messages: [{ role: "user", content: [block, { type: "text", text: ask }] }],
         tools: [
           {
             name: "report_payslip",
@@ -351,7 +355,7 @@ export function claudePayslipSource(client: Pick<Anthropic, "messages">, model: 
             input_schema: PAYSLIP_SCHEMA as Anthropic.Messages.Tool.InputSchema,
           },
         ],
-        tool_choice: { type: "tool", name: "report_payslip" },
+        tool_choice: { type: "auto" },
       });
       const toolUse = response.content.find((b): b is Anthropic.Messages.ToolUseBlock => b.type === "tool_use");
       if (!toolUse) throw new PayslipProviderError("לא החזיר תשובה מובנית");
