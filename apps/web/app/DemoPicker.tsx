@@ -2,7 +2,8 @@
 
 /**
  * מצב הדגמה במסך הפתיחה: 6 העובדים לדוגמה מהקובץ של המארגנים.
- * לחיצה טוענת את הנתונים ומציגה מיד את החישוב, בלי להקליד ובלי לחכות למודל שפה.
+ * בהתחלה מוצג רק הסבר קצר בטקסט, והכרטיסים נפתחים בלחיצה על "לדוגמה", כדי שמסך הפתיחה יישאר נקי.
+ * לחיצה על עובד טוענת את הנתונים ומציגה מיד את החישוב, בלי להקליד ובלי לחכות למודל שפה.
  * התג למעלה מחושב עכשיו בשרת: כל עובד נבדק מול נטו הייחוס של המארגנים.
  */
 import { useEffect, useState, type CSSProperties } from "react";
@@ -34,7 +35,17 @@ const initials = (name: string) =>
     .join("")
     .slice(0, 2);
 
-export function DemoPicker({ data, onView }: { data: DemoData | null; onView: (v: ChatView) => void }) {
+export function DemoPicker({
+  data,
+  open,
+  onToggle,
+  onView,
+}: {
+  data: DemoData | null;
+  open: boolean;
+  onToggle: () => void;
+  onView: (v: ChatView) => void;
+}) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,57 +82,75 @@ export function DemoPicker({ data, onView }: { data: DemoData | null; onView: (v
             </span>
             רוצים לראות איך זה עובד?
           </h3>
-          <p>בחרו עובד לדוגמה. הנתונים שלו נטענים, והחישוב מופיע מיד, בלי להקליד כלום.</p>
+          <p>
+            יש כאן {total} עובדים לדוגמה, כל אחד עם הרכב שלו היום והשאלה שהוא
+            שואל. בוחרים עובד, הנתונים שלו נטענים, והחישוב של הנטו מופיע מיד,
+            בלי להקליד כלום.
+          </p>
+          <p>
+            נבדק עכשיו:{" "}
+            <strong>
+              {matched} מתוך {total}
+            </strong>{" "}
+            העובדים לדוגמה של המארגנים יוצאים זהים עד השקל.
+          </p>
         </div>
-        <span className={`proof${matched === total ? "" : " partial"}`}>
-          <span className="proof-check" aria-hidden="true">
-            <Icon name={matched === total ? "check" : "alert"} size={14} />
-          </span>
-          <span>
-            נבדק עכשיו: <strong>{matched} מתוך {total}</strong> העובדים לדוגמה של המארגנים יוצאים זהים עד השקל
-          </span>
-        </span>
+        <button
+          type="button"
+          className="demo-toggle"
+          onClick={onToggle}
+          aria-expanded={open}
+          aria-controls="demo-list"
+        >
+          <Icon name={open ? "close" : "play"} size={15} />{" "}
+          {open ? "הסתרת הדוגמאות" : "לדוגמה"}
+        </button>
       </div>
 
-      <div className="persona-grid">
-        {data.personas.map((p, i) => (
-          <button
-            key={p.id}
-            type="button"
-            className={`persona${busy === p.id ? " loading" : ""}`}
-            style={{ "--tone": i } as CSSProperties}
-            onClick={() => void start(p.id)}
-            disabled={busy !== null}
-          >
-            <span className="persona-top">
-              <span className="persona-avatar" aria-hidden="true">
-                {initials(p.name)}
-              </span>
-              <span className="persona-who">
-                <span className="persona-name">{p.name}</span>
-                <span className="persona-role">
-                  {p.occupation} · קבוצה {p.group}
+      {open && (
+        <div className="persona-grid" id="demo-list">
+          {data.personas.map((p, i) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`persona${busy === p.id ? " loading" : ""}`}
+              style={{ "--tone": i } as CSSProperties}
+              onClick={() => void start(p.id)}
+              disabled={busy !== null}
+            >
+              <span className="persona-top">
+                <span className="persona-avatar" aria-hidden="true">
+                  {initials(p.name)}
+                </span>
+                <span className="persona-who">
+                  <span className="persona-name">{p.name}</span>
+                  <span className="persona-role">
+                    {p.occupation} · קבוצה {p.group}
+                  </span>
                 </span>
               </span>
-            </span>
-            <span className="persona-swap" aria-hidden="true">
-              <CarThumb carId={p.today.carId} kind={p.today.kind} />
-              <span className="persona-arrow">←</span>
-              <CarThumb carId={p.alternative.carId} kind={p.alternative.kind} />
-            </span>
-            <span className="persona-q">״{p.question}״</span>
-            <span className="persona-cta">
-              {busy === p.id ? (
-                "טוען..."
-              ) : (
-                <>
-                  <Icon name="play" size={14} /> הפעלה
-                </>
-              )}
-            </span>
-          </button>
-        ))}
-      </div>
+              <span className="persona-swap" aria-hidden="true">
+                <CarThumb carId={p.today.carId} kind={p.today.kind} />
+                <span className="persona-arrow">←</span>
+                <CarThumb
+                  carId={p.alternative.carId}
+                  kind={p.alternative.kind}
+                />
+              </span>
+              <span className="persona-q">״{p.question}״</span>
+              <span className="persona-cta">
+                {busy === p.id ? (
+                  "טוען..."
+                ) : (
+                  <>
+                    <Icon name="play" size={14} /> הפעלה
+                  </>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
       {error && (
         <div className="error" role="alert">
           {error}
