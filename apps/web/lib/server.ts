@@ -4,11 +4,18 @@
  * השיחות נשמרות ב-SQLite דרך ChatStore (N6), כולל מנעול שעובד גם בין כמה שרתים.
  * מסך הנציג (N7, N8) משתמש ב-listOpenRepQuestions וב-answerRepQuestion.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { CatalogCar, EmployeeProfile, Occupation, Rules } from "@strauss/engine";
-import { ChatStore, ChatStoreBusyError, ChatStoreNotFoundError, type ChatRecord } from "@strauss/data";
+import {
+  ChatStore,
+  ChatStoreBusyError,
+  ChatStoreNotFoundError,
+  SqliteDataSource,
+  resolveDbPath,
+  type ChatRecord,
+} from "@strauss/data";
 import {
   type CarGroup,
   CatalogDataSource,
@@ -29,6 +36,7 @@ import {
   runTurn,
   type AgentOptions,
   type ComparisonRecord,
+  type DataSource,
   type RankingRecord,
   type ToolContext,
   type TurnResult,
@@ -87,11 +95,25 @@ function loadJson<T>(name: string): T {
   return JSON.parse(readFileSync(join(dir, name), "utf-8")) as T;
 }
 
+/**
+ * מאגר שווי השימוש המלא של רשות המסים (77,988 רכבים, SQLite), כדי למצוא גם רכב שלא בקטלוג, למשל הרכב של העובד היום.
+ * מחפשים במקום של DB_PATH, ובמקום ש-npm run data:import כותב אליו כברירת מחדל.
+ * אם המאגר עוד לא יובא, מחפשים רק ברכבי הקטלוג, עם אזהרה ביומן.
+ */
+function valueOfUseSource(catalog: CatalogCar[]): DataSource {
+  const path = [resolveDbPath(), resolve(process.cwd(), "..", "..", "packages", "data", ".data", "value-of-use.db")].find(
+    (p) => existsSync(p),
+  );
+  if (path) return new SqliteDataSource(path);
+  console.warn("[data] value-of-use.db not found: searching only the 20 catalog cars. Run: npm run data:import");
+  return new CatalogDataSource(catalog);
+}
+
 interface ServerState {
   rules: Rules;
   catalog: CatalogCar[];
   occupations: Occupation[];
-  data: CatalogDataSource;
+  data: DataSource;
   rep: MemoryRepQueue;
   chats: ChatStore<TranscriptEntry>;
   agent?: AgentOptions;
@@ -112,7 +134,7 @@ function state(): ServerState {
       rules: loadJson<Rules>("rules.json"),
       catalog,
       occupations: loadJson<Occupation[]>("occupations.json"),
-      data: new CatalogDataSource(catalog),
+      data: valueOfUseSource(catalog),
       rep: new MemoryRepQueue(),
       chats: new ChatStore<TranscriptEntry>(),
     };
