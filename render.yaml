@@ -53,3 +53,11 @@ services:
       # עובדים שמורשים להיכנס (דומיין עם @ או כתובות). ריק: כל חשבון Google
       - key: ALLOWED_EMAILS
         sync: false
+      # הכתובת הציבורית של השירות (https://<השירות>.onrender.com), לקישורים במייל
+      - key: AUTH_URL
+        sync: false
+      # שליחת מייל דרך Brevo (לא חובה). בלי שניהם, הכפתור פותח מייל מוכן אצל העובד
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
