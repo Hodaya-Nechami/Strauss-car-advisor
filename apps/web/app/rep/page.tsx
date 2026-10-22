@@ -37,6 +37,12 @@ export default async function RepPage({ searchParams }: { searchParams: Promise<
         <button type="submit" className="ghost-button rep-primary">
           התחברות עם Google
         </button>
+        {/* עובד שנכנס לאתר עם חשבון שאינו ב-REP_EMAILS: מחובר, אבל לא לכאן */}
+        {email && !error && (
+          <div className="rep-error">
+            החשבון <bdi>{email}</bdi> לא מורשה למסך הנציג. אפשר להתחבר עם חשבון אחר של הצוות.
+          </div>
+        )}
         {error && (
           <div className="rep-error">
             {error === "AccessDenied" ? "החשבון הזה לא מורשה להיכנס למסך הנציג" : "ההתחברות נכשלה, נסו שוב"}

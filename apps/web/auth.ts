@@ -1,32 +1,34 @@
+/**
+ * כניסה עם Google לכל המערכת: המערכת פנימית לעובדי החברה.
+ * עם המפתחות, כל מסך וכל API דורשים כניסה (middleware.ts). עובדים נכנסים לפי ALLOWED_EMAILS,
+ * ומסך הנציג פתוח רק למיילים שב-REP_EMAILS. בלי המפתחות האתר פתוח, ומסך הנציג חוזר לסיסמה.
+ */
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import { googleLoginEnabled, isAllowedEmployee, isAllowedRep } from "./lib/access";
 
-/** המיילים שמורשים להיכנס למסך הנציג, מ-REP_EMAILS (מופרדים בפסיקים) */
-export function allowedRepEmails(): string[] {
-  return (process.env.REP_EMAILS ?? "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-/** התחברות עם גוגל פעילה רק כשהוגדרו המפתחות שלה. אחרת מסך הנציג חוזר לסיסמה המשותפת. */
-export function googleLoginEnabled(): boolean {
-  return Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET && process.env.AUTH_SECRET);
-}
-
-export function isAllowedRep(email: string | null | undefined): boolean {
-  return Boolean(email) && allowedRepEmails().includes(email!.toLowerCase());
-}
+export { allowedRepEmails, googleLoginEnabled, isAllowedEmployee, isAllowedRep } from "./lib/access";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  providers: [Google],
+  // select_account: אפשר לבחור חשבון אחר, למשל לעבור מחשבון פרטי לחשבון של הצוות
+  providers: [Google({ authorization: { params: { prompt: "select_account" } } })],
   // מאחורי Docker ו-Render הכתובת מגיעה מה-proxy
   trustHost: true,
-  pages: { signIn: "/rep", error: "/rep" },
+  // יום עבודה. אחרי זה נכנסים שוב.
+  session: { maxAge: 10 * 60 * 60 },
+  pages: { signIn: "/login", error: "/login" },
   callbacks: {
-    // רק מייל מאומת שמופיע ב-REP_EMAILS מקבל session
+    // רק מייל מאומת: של עובד מורשה, או של נציג מ-REP_EMAILS
     signIn({ profile }) {
-      return profile?.email_verified === true && isAllowedRep(profile.email);
+      return profile?.email_verified === true && (isAllowedEmployee(profile.email) || isAllowedRep(profile.email));
     },
   },
 });
+
+/** העובד המחובר, או null כשהכניסה כבויה או שאין חיבור */
+export async function currentUser(): Promise<{ email: string; name: string | null } | null> {
+  if (!googleLoginEnabled()) return null;
+  const session = await auth();
+  const email = session?.user?.email;
+  return email ? { email, name: session.user?.name ?? null } : null;
+}

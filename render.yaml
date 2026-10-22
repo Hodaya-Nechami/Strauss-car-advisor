@@ -33,6 +33,13 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      # בתשלום. עם LLM_PROVIDER=claude,openai הם ראשונים בתור, והחינמיים גיבוי
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: LLM_PROVIDER
+        sync: false
       - key: REP_PASSWORD
         sync: false
       - key: AUTH_SECRET
@@ -42,4 +49,7 @@ services:
       - key: AUTH_GOOGLE_SECRET
         sync: false
       - key: REP_EMAILS
+        sync: false
+      # עובדים שמורשים להיכנס (דומיין עם @ או כתובות). ריק: כל חשבון Google
+      - key: ALLOWED_EMAILS
         sync: false

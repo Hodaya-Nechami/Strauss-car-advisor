@@ -116,6 +116,18 @@ const PATHS = {
   chat: <path d="M4.5 5h15v10.5H10L5.5 19.5V15.5H4.5V5Z" />,
   arrowLeft: <path d="M19 12H5M11 6l-6 6 6 6" />,
   edit: <path d="M4.5 19.5 5.3 15 15.6 4.7a2 2 0 0 1 2.8 0l.9.9a2 2 0 0 1 0 2.8L9 18.7l-4.5.8ZM13.5 6.8l3.7 3.7" />,
+  mail: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="m4 7.5 8 5.5 8-5.5" />
+    </>
+  ),
+  logout: (
+    <>
+      <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4" />
+      <path d="m15 8 4 4-4 4M19 12H9" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof PATHS;

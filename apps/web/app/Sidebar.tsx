@@ -9,6 +9,7 @@ import { Icon, type IconName } from "./Icon";
 import { PickPayslip } from "./Payslip";
 import { ProfilePanel } from "./ProfilePanel";
 import type { ChatView, Profile } from "./types";
+import { UserBadge } from "./UserBadge";
 
 export const QUICK_ASKS: { icon: IconName; label: string; text: string }[] = [
   { icon: "trophy", label: "מה הכי משתלם לי?", text: "מה הכי משתלם לי מכל הרכבים שמגיעים לי?" },
@@ -89,6 +90,7 @@ export function Sidebar({
         </section>
 
         <div className="rail-foot">
+          <UserBadge />
           {proof && (
             <div className="rail-proof">
               <Icon name="shield" />
