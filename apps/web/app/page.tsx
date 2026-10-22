@@ -47,7 +47,7 @@ function renderText(text: string): ReactNode[] {
   );
 }
 
-/** מצב הרוח של נטו ליד כל תשובה: שמח כשהנטו עולה, מודאג כשהוא יורד */
+/** מצב הרוח של נטבוט ליד כל תשובה: שמח כשהנטו עולה, מודאג כשהוא יורד */
 function moodFor(entry: TranscriptEntry): MascotMood {
   const last = entry.comparisons?.at(-1)?.result.diffNet ?? entry.rankings?.at(-1)?.result.options[0]?.diffNet;
   if (typeof last === "number" && last > 0) return "happy";
@@ -226,8 +226,9 @@ export default function ChatPage() {
                       מה יקרה ל<em>נטו</em> שלך?
                     </h2>
                     <p>
-                      ספרו לי איזה רכב יש לכם ומה אתם שוקלים: רכב אחר, רכב חשמלי או ויתור על הרכב. אחשב בדיוק כמה
-                      הנטו ישתנה, לפי כללי החברה ונתוני רשות המסים. אם יחסר לי משהו שרק החברה יודעת, אשאל את הנציג.
+                      ספרו לי איזה רכב יש לכם היום, ומה אתם שוקלים: להחליף אותו ברכב אחר, לעבור לחשמלי או לוותר
+                      עליו. אחשב בדיוק כמה הנטו ישתנה, לפי כללי החברה ונתוני רשות המסים. אם יחסר לי משהו שרק החברה
+                      יודעת, אשאל את הנציג.
                     </p>
                     <ul className="features">
                       {FEATURES.map((f) => (
@@ -251,9 +252,9 @@ export default function ChatPage() {
                     <div className="welcome-glow" aria-hidden="true" />
                     <Bloom size={340} variant="hero" />
                     <div className="hero-car">
-                      <Mascot mood="happy" size={136} title="נטו, יועץ הרכב" />
+                      <Mascot mood="happy" size={136} title="נטבוט, יועץ הרכב" />
                     </div>
-                    <div className="speech">היי! אני נטו</div>
+                    <div className="speech">היי! אני נטבוט</div>
                   </div>
                 </section>
               )}
@@ -327,7 +328,7 @@ export default function ChatPage() {
                   </div>
                   <div className="typing-bubble">
                     <Bloom size={26} variant="thinking" />
-                    נטו בודק ומחשב...
+                    נטבוט בודק ומחשב...
                   </div>
                 </div>
               )}
@@ -364,10 +365,10 @@ export default function ChatPage() {
             }}
           >
             <textarea
-              aria-label="הודעה לנטו"
+              aria-label="הודעה לנטבוט"
               rows={1}
               value={input}
-              placeholder="כתבו לנטו..."
+              placeholder="כתבו לנטבוט..."
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {

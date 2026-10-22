@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   NotAPayslipError,
   OPENROUTER_VISION_MODELS,
+  claudePayslipSource,
   geminiPayslipSource,
   normalizePayslip,
   openRouterPayslipSource,
@@ -129,6 +130,43 @@ describe("קריאת תלוש שכר", () => {
     await expect(readPayslipFrom([down, openRouterPayslipSource("key", ["m"], busy)], file)).rejects.toThrow(
       "לא הצלחתי לקרוא את התלוש כרגע (Gemini: לא ענה בזמן; OpenRouter: עמוס או הגיע למכסה)",
     );
+  });
+
+  it("שולח ל-Claude את הקובץ כ-document, עם tool_choice auto (tool כפוי לא נתמך במודל הזה)", async () => {
+    const requests: any[] = [];
+    const client = {
+      messages: {
+        create: async (req: unknown) => {
+          requests.push(req);
+          return { content: [{ type: "tool_use", id: "t1", name: "report_payslip", input: printed() }] };
+        },
+      },
+    } as any;
+
+    const r = await readPayslipFrom([claudePayslipSource(client, "claude-test")], file);
+    expect(r.fields.baseSalary!.value).toBe(14200);
+    expect(r.via).toBe("Claude");
+    const req = requests[0];
+    expect(req.model).toBe("claude-test");
+    expect(req.tool_choice).toEqual({ type: "auto" });
+    expect(req.tools[0].name).toBe("report_payslip");
+    expect(req.messages[0].content[0]).toEqual({
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: "QUJD" },
+    });
+  });
+
+  it("Claude לא תומך ב-HEIC: נכשל מיד ועובר לספק הבא בלי לשלוח בקשה", async () => {
+    let called = false;
+    const client = { messages: { create: async () => ((called = true), { content: [] }) } } as any;
+    const next: PayslipSource = { label: "next", read: async () => printed() };
+
+    const r = await readPayslipFrom([claudePayslipSource(client, "claude-test"), next], {
+      data: "QUJD",
+      mimeType: "image/heic",
+    });
+    expect(called).toBe(false);
+    expect(r.via).toBe("next");
   });
 
   it("מסמך שאינו תלוש עוצר מיד, בלי לשלוח אותו לספק נוסף", async () => {

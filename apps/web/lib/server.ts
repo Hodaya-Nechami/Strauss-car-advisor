@@ -42,6 +42,7 @@ import {
   type ReferenceResult,
   type SampleEmployee,
 } from "./demo";
+import { redactIdNumbers } from "./privacy";
 
 /** השוואה במסך. בהדגמה מצורפת גם הבדיקה מול נטו הייחוס של המארגנים. */
 export type ScreenComparison = ComparisonRecord & { reference?: ReferenceCheck };
@@ -206,9 +207,10 @@ export async function sendMessage(sessionId: string | null, text: string): Promi
   const s = state();
   const options = agentOptions(s);
   const id = sessionId && s.chats.get(sessionId) ? sessionId : createChat().sessionId!;
+  const safeText = redactIdNumbers(text);
   await withLock(id, async (chat) => {
-    chat.transcript.push({ role: "employee", text, at: now() });
-    const result = await runTurn(context(s, chat), text, options);
+    chat.transcript.push({ role: "employee", text: safeText, at: now() });
+    const result = await runTurn(context(s, chat), safeText, options);
     chat.transcript.push(botEntry(result));
   });
   return view(s.chats.get(id));
@@ -459,9 +461,10 @@ export function listRepHistory() {
 export async function answerRepQuestion(sessionId: string, ticketId: string, answer: string): Promise<ChatView> {
   const s = state();
   const options = agentOptions(s);
+  const safeAnswer = redactIdNumbers(answer);
   await withLock(sessionId, async (chat) => {
-    chat.transcript.push({ role: "notice", text: `הנציג ענה: ${answer}`, at: now() });
-    const result = await resumeWithRepAnswer(context(s, chat), ticketId, answer, options);
+    chat.transcript.push({ role: "notice", text: `הנציג ענה: ${safeAnswer}`, at: now() });
+    const result = await resumeWithRepAnswer(context(s, chat), ticketId, safeAnswer, options);
     chat.transcript.push(botEntry(result));
   });
   return view(s.chats.get(sessionId));

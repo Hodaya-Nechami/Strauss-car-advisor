@@ -5,6 +5,8 @@
  * התלוש עצמו לא נשמר ולא נרשם ביומן.
  */
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
+import { DEFAULT_CLAUDE_MODEL } from "./claude";
 import { DEFAULT_GEMINI_MODEL, DEFAULT_OPENROUTER_MODELS, OPENROUTER_BASE_URL, type GeminiClient } from "./free";
 
 export const PAYSLIP_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"] as const;
@@ -316,6 +318,52 @@ export function openRouterPayslipSource(
   };
 }
 
+/** תמונות שClaude קורא ישירות. HEIC לא נתמך - נופל לספק הבא. */
+const CLAUDE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+/**
+ * Claude: קורא PDF ותמונות בעצמו, ומחזיר JSON מובנה דרך כלי יחיד.
+ * tool_choice מסוג "tool" (כפוי) לא נתמך במודל הזה - "auto" עם הנחיה מפורשת בפרומפט במקום.
+ */
+export function claudePayslipSource(client: Pick<Anthropic, "messages">, model: string = DEFAULT_CLAUDE_MODEL): PayslipSource {
+  return {
+    label: "Claude",
+    async read(file) {
+      const isPdf = file.mimeType === "application/pdf";
+      if (!isPdf && !CLAUDE_IMAGE_TYPES.has(file.mimeType)) {
+        throw new PayslipProviderError(`לא תומך בפורמט ${file.mimeType}`);
+      }
+      const block: Anthropic.Messages.ContentBlockParam = isPdf
+        ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: file.data } }
+        : {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: file.mimeType as Anthropic.Messages.Base64ImageSource["media_type"],
+              data: file.data,
+            },
+          };
+      const ask = `${PAYSLIP_PROMPT}\nהחזר את התשובה אך ורק דרך קריאה לכלי report_payslip, בלי טקסט חופשי.`;
+      const response = await client.messages.create({
+        model,
+        max_tokens: 2000,
+        messages: [{ role: "user", content: [block, { type: "text", text: ask }] }],
+        tools: [
+          {
+            name: "report_payslip",
+            description: "מחזיר את מה שמודפס בתלוש, לפי הסכמה",
+            input_schema: PAYSLIP_SCHEMA as Anthropic.Messages.Tool.InputSchema,
+          },
+        ],
+        tool_choice: { type: "auto" },
+      });
+      const toolUse = response.content.find((b): b is Anthropic.Messages.ToolUseBlock => b.type === "tool_use");
+      if (!toolUse) throw new PayslipProviderError("לא החזיר תשובה מובנית");
+      return toolUse.input;
+    },
+  };
+}
+
 function failureFromStatus(status: number): string {
   if (status === 429) return "עמוס או הגיע למכסה";
   if (status === 401 || status === 403) return "המפתח לא תקין";
@@ -354,7 +402,7 @@ export async function readPayslipFrom(sources: PayslipSource[], file: PayslipFil
 
 export type PayslipReader = (file: PayslipFile) => Promise<PayslipReading>;
 
-/** קורא תלושים לפי המפתחות שבסביבה: Gemini, ואם הוא לא עונה, OpenRouter. null כשאין אף מפתח מתאים. */
+/** קורא תלושים לפי המפתחות שבסביבה: Gemini, ואם הוא לא עונה, OpenRouter, ואם יש מפתח Claude גם הוא. null כשאין אף מפתח מתאים. */
 export function payslipReaderFromEnv(env: Record<string, string | undefined>): PayslipReader | null {
   const sources: PayslipSource[] = [];
   if (env.GEMINI_API_KEY) {
@@ -364,6 +412,10 @@ export function payslipReaderFromEnv(env: Record<string, string | undefined>): P
   if (env.OPENROUTER_API_KEY) {
     const models = env.OPENROUTER_MODEL?.split(",").map((m) => m.trim()).filter(Boolean);
     sources.push(openRouterPayslipSource(env.OPENROUTER_API_KEY, models?.length ? models : DEFAULT_OPENROUTER_MODELS));
+  }
+  if (env.ANTHROPIC_API_KEY) {
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+    sources.push(claudePayslipSource(client, env.CLAUDE_MODEL || DEFAULT_CLAUDE_MODEL));
   }
   return sources.length ? (file) => readPayslipFrom(sources, file) : null;
 }
