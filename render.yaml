@@ -1,0 +1,41 @@
+# Render Blueprint: פריסת apps/web מה-Dockerfile הקיים, עם disk מתמיד ל-SQLite
+# (מקביל ל-volume strauss_data ב-docker-compose.yml).
+#
+# שימוש: ב-Render dashboard -> New -> Blueprint -> לבחור את הריפו והענף הזה.
+# מפתחות (GEMINI_API_KEY וכו') צריך למלא ידנית ב-dashboard אחרי היצירה (sync: false).
+#
+# ייבוא ראשוני של מאגר שווי השימוש: אחרי שהשירות עולה בפעם הראשונה, ב-tab "Shell"
+# בדשבורד מריצים פעם אחת: npm run data:import
+
+services:
+  - type: web
+    name: strauss-car-advisor
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: frankfurt
+    branch: nechami/n9-docker-deploy
+    envVars:
+      - key: DB_PATH
+        value: /app/.data/value-of-use.db
+      - key: CHATS_DB_PATH
+        value: /app/.data/chats.db
+      - key: TRUST_PROXY
+        value: "1"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: REP_PASSWORD
+        sync: false
+    disk:
+      name: strauss-data
+      mountPath: /app/.data
+      sizeGB: 1
