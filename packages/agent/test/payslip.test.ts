@@ -176,4 +176,12 @@ describe("קריאת תלוש שכר", () => {
     await expect(readPayslipFrom([source(), source()], file)).rejects.toThrow(NotAPayslipError);
     expect(calls).toBe(1);
   });
+
+  it("ספק תקוע לא עובר את הזמן הכולל, וספק שאחריו לא נקרא כשהזמן נגמר", async () => {
+    let nextCalled = false;
+    const stuck: PayslipSource = { name: "stuck", label: "Stuck", read: () => new Promise(() => undefined) };
+    const next: PayslipSource = { name: "next", label: "next", read: async () => ((nextCalled = true), printed()) };
+    await expect(readPayslipFrom([stuck, next], file, 50)).rejects.toThrow("Stuck: לא ענה בזמן");
+    expect(nextCalled).toBe(false);
+  });
 });

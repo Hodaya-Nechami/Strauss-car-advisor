@@ -426,13 +426,35 @@ function failureReason(err: unknown): string {
 }
 
 /**
- * קורא את התלוש אצל הספק הראשון שמצליח. מסמך שאינו תלוש עוצר מיד, כי ספק אחר לא ישנה את התשובה.
+ * כמה זמן כל הקריאה יכולה לקחת, כולל מעבר בין ספקים. Render (דרך Cloudflare) מנתק בקשה אחרי 100 שניות
+ * ומחזיר דף HTML במקום JSON, והדפדפן מציג "אין חיבור לשרת". עדיף לעצור קודם ולהחזיר הודעה ברורה.
  */
-export async function readPayslipFrom(sources: PayslipSource[], file: PayslipFile): Promise<PayslipReading> {
+export const PAYSLIP_BUDGET_MS = 80_000;
+
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error("timed out"), { name: "TimeoutError" })), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * קורא את התלוש אצל הספק הראשון שמצליח. מסמך שאינו תלוש עוצר מיד, כי ספק אחר לא ישנה את התשובה.
+ * כשנגמר הזמן הכולל, לא ממשיכים לספק הבא.
+ */
+export async function readPayslipFrom(
+  sources: PayslipSource[],
+  file: PayslipFile,
+  budgetMs = PAYSLIP_BUDGET_MS,
+): Promise<PayslipReading> {
   const failures: { provider: string; reason: string }[] = [];
+  const deadline = Date.now() + budgetMs;
   for (const source of sources) {
+    const left = deadline - Date.now();
+    if (left <= 0) break;
     try {
-      const reading = normalizePayslip(coercePrinted(await source.read(file)));
+      const reading = normalizePayslip(coercePrinted(await withTimeout(source.read(file), left)));
       return { ...reading, via: source.label };
     } catch (err) {
       if (err instanceof NotAPayslipError) throw err;
@@ -464,7 +486,7 @@ export function payslipReaderFromEnv(env: Record<string, string | undefined>): P
     sources.push(openAIPayslipSource(client, env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL));
   }
   if (env.ANTHROPIC_API_KEY) {
-    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 0, timeout: 60_000 });
     sources.push(claudePayslipSource(client, env.CLAUDE_MODEL || DEFAULT_CLAUDE_MODEL));
   }
   const ordered = orderByPreference(sources, env.LLM_PROVIDER);

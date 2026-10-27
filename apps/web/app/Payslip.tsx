@@ -38,8 +38,11 @@ export function usePayslip() {
     form.append("file", file);
     try {
       const res = await fetch("/api/payslip", { method: "POST", body: form });
-      const data = (await res.json()) as PayslipReading & { error?: string };
-      if (!res.ok) setSlip({ phase: "error", message: data.error ?? "לא הצלחתי לקרוא את התלוש." });
+      // כשהשרת מתעורר או לא עונה בזמן, Render מחזיר דף HTML ולא JSON
+      const data = (await res.json().catch(() => null)) as (PayslipReading & { error?: string }) | null;
+      if (!data) {
+        setSlip({ phase: "error", message: "השרת לא ענה בזמן, אולי כי הוא רק מתעורר. נסו שוב בעוד דקה." });
+      } else if (!res.ok) setSlip({ phase: "error", message: data.error ?? "לא הצלחתי לקרוא את התלוש." });
       else setSlip({ phase: "review", reading: data });
     } catch {
       setSlip({ phase: "error", message: "אין חיבור לשרת. בדקו שהוא רץ ונסו שוב." });
