@@ -41,7 +41,11 @@ export function usePayslip() {
       // כשהשרת מתעורר או לא עונה בזמן, Render מחזיר דף HTML ולא JSON
       const data = (await res.json().catch(() => null)) as (PayslipReading & { error?: string }) | null;
       if (!data) {
-        setSlip({ phase: "error", message: "השרת לא ענה בזמן, אולי כי הוא רק מתעורר. נסו שוב בעוד דקה." });
+        // הקוד עוזר להבין מי ענה: 502/503 השרת קרס או מתעורר, 524 נגמר הזמן, 403/418 סינון אינטרנט
+        setSlip({
+          phase: "error",
+          message: `השרת לא ענה בזמן, אולי כי הוא רק מתעורר. נסו שוב בעוד דקה. (קוד ${res.status})`,
+        });
       } else if (!res.ok) setSlip({ phase: "error", message: data.error ?? "לא הצלחתי לקרוא את התלוש." });
       else setSlip({ phase: "review", reading: data });
     } catch {
