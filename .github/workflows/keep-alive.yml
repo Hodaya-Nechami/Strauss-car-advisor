@@ -1,0 +1,19 @@
+# גיבוי לשמירה על האתר ער ב-Render: פונה לבדיקת החיים כל 10 דקות.
+# השרת גם מעיר את עצמו (apps/web/instrumentation.ts). זה תופס את המקרים שבהם הוא בכל זאת נרדם,
+# למשל אחרי הפעלה מחדש. GitHub לפעמים מאחר בהרצות מתוזמנות, ולכן זה רק גיבוי.
+name: Keep the site awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Ping the health check
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://strauss-car-advisor-5bjl.onrender.com' }}
+        run: curl -fsS --max-time 150 --retry 2 --retry-delay 10 "$SITE_URL/api/health"
