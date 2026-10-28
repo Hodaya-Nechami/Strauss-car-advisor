@@ -431,6 +431,16 @@ function failureReason(err: unknown): string {
  */
 export const PAYSLIP_BUDGET_MS = 80_000;
 
+/**
+ * כשלא נקבע סדר (LLM_PROVIDER), הספקים בתשלום קוראים ראשונים: הם קוראים תלוש בכמה שניות,
+ * והחינמיים נתקעים לפעמים עשרות שניות לפני שעוברים לבא בתור.
+ */
+export const PAYSLIP_DEFAULT_ORDER = "claude,openai";
+
+export function orderPayslipSources<T extends { name: string }>(sources: T[], preference: string | undefined): T[] {
+  return orderByPreference(sources, preference?.trim() ? preference : PAYSLIP_DEFAULT_ORDER);
+}
+
 function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -474,12 +484,14 @@ export type PayslipReader = (file: PayslipFile) => Promise<PayslipReading>;
 export function payslipReaderFromEnv(env: Record<string, string | undefined>): PayslipReader | null {
   const sources: PayslipSource[] = [];
   if (env.GEMINI_API_KEY) {
-    const client = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY, httpOptions: { timeout: 45_000 } });
+    const client = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY, httpOptions: { timeout: 30_000 } });
     sources.push(geminiPayslipSource(client, env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL));
   }
   if (env.OPENROUTER_API_KEY) {
     const models = env.OPENROUTER_MODEL?.split(",").map((m) => m.trim()).filter(Boolean);
-    sources.push(openRouterPayslipSource(env.OPENROUTER_API_KEY, models?.length ? models : DEFAULT_OPENROUTER_MODELS));
+    sources.push(
+      openRouterPayslipSource(env.OPENROUTER_API_KEY, models?.length ? models : DEFAULT_OPENROUTER_MODELS, fetch, 40_000),
+    );
   }
   if (env.OPENAI_API_KEY) {
     const client = new OpenAI({ apiKey: env.OPENAI_API_KEY, maxRetries: 0, timeout: 90_000 });
@@ -489,6 +501,6 @@ export function payslipReaderFromEnv(env: Record<string, string | undefined>): P
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 0, timeout: 60_000 });
     sources.push(claudePayslipSource(client, env.CLAUDE_MODEL || DEFAULT_CLAUDE_MODEL));
   }
-  const ordered = orderByPreference(sources, env.LLM_PROVIDER);
+  const ordered = orderPayslipSources(sources, env.LLM_PROVIDER);
   return ordered.length ? (file) => readPayslipFrom(ordered, file) : null;
 }

@@ -7,6 +7,7 @@ import {
   geminiPayslipSource,
   normalizePayslip,
   openRouterPayslipSource,
+  orderPayslipSources,
   readPayslipFrom,
   type GeminiClient,
   type PayslipSource,
@@ -183,5 +184,18 @@ describe("קריאת תלוש שכר", () => {
     const next: PayslipSource = { name: "next", label: "next", read: async () => ((nextCalled = true), printed()) };
     await expect(readPayslipFrom([stuck, next], file, 50)).rejects.toThrow("Stuck: לא ענה בזמן");
     expect(nextCalled).toBe(false);
+  });
+});
+
+describe("סדר הספקים בקריאת תלוש", () => {
+  const sources = ["gemini", "openrouter", "openai", "claude"].map((name) => ({ name }));
+
+  it("בלי סדר מוגדר, הספקים בתשלום קוראים ראשונים", () => {
+    expect(orderPayslipSources(sources, undefined).map((s) => s.name)).toEqual(["claude", "openai", "gemini", "openrouter"]);
+    expect(orderPayslipSources(sources, "  ").map((s) => s.name)).toEqual(["claude", "openai", "gemini", "openrouter"]);
+  });
+
+  it("סדר שנקבע ב-LLM_PROVIDER נשמר", () => {
+    expect(orderPayslipSources(sources, "gemini").map((s) => s.name)).toEqual(["gemini", "openrouter", "openai", "claude"]);
   });
 });

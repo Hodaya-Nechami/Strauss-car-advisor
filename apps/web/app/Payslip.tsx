@@ -21,8 +21,50 @@ export type PayslipState =
   | { phase: "error"; message: string };
 
 /** הקריאה עצמה: בדיקה בדפדפן, שליחה לשרת, ומצב לתצוגה */
+const POLL_EVERY_MS = 2000;
+const POLL_LIMIT_MS = 150_000;
+const NO_CONNECTION = "אין חיבור לשרת. בדקו את החיבור לאינטרנט ונסו שוב.";
+
+/** תשובה שאינה JSON מגיעה ממשהו שבדרך (Render, Cloudflare, סינון אינטרנט) ולא מהשרת. הקוד עוזר להבין ממי. */
+const notJson = (status: number) =>
+  `השרת לא ענה כמו שצריך (קוד ${status}). נסו שוב בעוד דקה, או כתבו את הנתונים בצ'אט.`;
+
+class SlipError extends Error {}
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export function usePayslip() {
   const [slip, setSlip] = useState<PayslipState>({ phase: "idle" });
+  // כל קריאה מקבלת מספר. ביטול או קריאה חדשה מפסיקים לחכות לקודמת.
+  const attempt = useRef(0);
+
+  /** שואל כל שתי שניות אם הקריאה ברקע הסתיימה */
+  async function waitForReading(jobId: string, mine: number): Promise<PayslipReading | null> {
+    const deadline = Date.now() + POLL_LIMIT_MS;
+    let misses = 0;
+    while (Date.now() < deadline) {
+      await wait(POLL_EVERY_MS);
+      if (attempt.current !== mine) return null;
+      let res: Response;
+      try {
+        res = await fetch(`/api/payslip?job=${encodeURIComponent(jobId)}`, { cache: "no-store" });
+      } catch {
+        if (++misses > 3) throw new SlipError(NO_CONNECTION);
+        continue;
+      }
+      const data = (await res.json().catch(() => null)) as
+        | { status?: "pending" | "done"; reading?: PayslipReading; error?: string }
+        | null;
+      if (!data) {
+        if (++misses > 3) throw new SlipError(notJson(res.status));
+        continue;
+      }
+      misses = 0;
+      if (!res.ok) throw new SlipError(data.error ?? "לא הצלחתי לקרוא את התלוש.");
+      if (data.status === "done" && data.reading) return data.reading;
+    }
+    throw new SlipError("קריאת התלוש לוקחת יותר מדי זמן. נסו שוב, או כתבו את הנתונים בצ'אט.");
+  }
 
   async function readFile(file: File) {
     if (!ACCEPT.split(",").includes(file.type)) {
@@ -33,19 +75,20 @@ export function usePayslip() {
       setSlip({ phase: "error", message: "הקובץ גדול מדי. אפשר להעלות קובץ עד 8MB." });
       return;
     }
+    const mine = ++attempt.current;
     setSlip({ phase: "reading", name: file.name });
     const form = new FormData();
     form.append("file", file);
     try {
       const res = await fetch("/api/payslip", { method: "POST", body: form });
-      // כשהשרת מתעורר או לא עונה בזמן, Render מחזיר דף HTML ולא JSON
-      const data = (await res.json().catch(() => null)) as (PayslipReading & { error?: string }) | null;
-      if (!data) {
-        setSlip({ phase: "error", message: "השרת לא ענה בזמן, אולי כי הוא רק מתעורר. נסו שוב בעוד דקה." });
-      } else if (!res.ok) setSlip({ phase: "error", message: data.error ?? "לא הצלחתי לקרוא את התלוש." });
-      else setSlip({ phase: "review", reading: data });
-    } catch {
-      setSlip({ phase: "error", message: "אין חיבור לשרת. בדקו שהוא רץ ונסו שוב." });
+      const started = (await res.json().catch(() => null)) as { jobId?: string; error?: string } | null;
+      if (!started) throw new SlipError(notJson(res.status));
+      if (!res.ok || !started.jobId) throw new SlipError(started.error ?? "לא הצלחתי לקרוא את התלוש.");
+      const reading = await waitForReading(started.jobId, mine);
+      if (reading && attempt.current === mine) setSlip({ phase: "review", reading });
+    } catch (err) {
+      if (attempt.current !== mine) return;
+      setSlip({ phase: "error", message: err instanceof SlipError ? err.message : NO_CONNECTION });
     }
   }
 
@@ -58,7 +101,12 @@ export function usePayslip() {
     }
   }
 
-  return { slip, readFile, readSample, reset: () => setSlip({ phase: "idle" }) };
+  function reset() {
+    attempt.current++;
+    setSlip({ phase: "idle" });
+  }
+
+  return { slip, readFile, readSample, reset };
 }
 
 /** כפתור כלשהו שפותח בחירת תלוש */

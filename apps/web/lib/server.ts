@@ -28,6 +28,7 @@ import {
   PAYSLIP_MAX_BYTES,
   PAYSLIP_MIME_TYPES,
   payslipReaderFromEnv,
+  type PayslipReader,
   type PayslipReading,
   resolveMode,
   newSession,
@@ -442,21 +443,22 @@ export async function updateProfile(
   return view(s.chats.get(id));
 }
 
-/**
- * קורא תלוש שכר ומחזיר את מה שנקרא, לאישור העובד. לא שומר כלום: לא את התלוש ולא את הנתונים.
- */
-export async function readPayslip(data: Uint8Array, mimeType: string): Promise<PayslipReading> {
+/** בדיקות לפני קריאה: סוג הקובץ, הגודל, ושיש ספק שיכול לקרוא. נכשלות מיד, בלי לחכות למודל. */
+function payslipReaderFor(data: Uint8Array, mimeType: string, read: PayslipReader | null): PayslipReader {
   if (!(PAYSLIP_MIME_TYPES as readonly string[]).includes(mimeType)) {
     throw new ChatError(415, "אפשר להעלות תלוש כקובץ PDF או כתמונה (JPG או PNG).");
   }
   if (data.byteLength > PAYSLIP_MAX_BYTES) throw new ChatError(413, "הקובץ גדול מדי. אפשר להעלות קובץ עד 8MB.");
-  const read = payslipReaderFromEnv(process.env);
   if (!read) {
     throw new ChatError(
       503,
       "קריאת תלוש צריכה מפתח של Gemini, OpenRouter, OpenAI או Claude בקובץ apps/web/.env. בינתיים אפשר לכתוב את הנתונים בצ'אט.",
     );
   }
+  return read;
+}
+
+async function runPayslipReader(read: PayslipReader, data: Uint8Array, mimeType: string): Promise<PayslipReading> {
   try {
     return await read({ data: Buffer.from(data).toString("base64"), mimeType });
   } catch (err) {
@@ -465,6 +467,85 @@ export async function readPayslip(data: Uint8Array, mimeType: string): Promise<P
     console.error("[payslip] read failed:", err instanceof Error ? err.message.slice(0, 300) : "unknown");
     throw new ChatError(500, "לא הצלחתי לקרוא את התלוש. נסו שוב, או כתבו את הנתונים בצ'אט.");
   }
+}
+
+/**
+ * קורא תלוש שכר ומחזיר את מה שנקרא, לאישור העובד. לא שומר כלום: לא את התלוש ולא את הנתונים.
+ */
+export async function readPayslip(
+  data: Uint8Array,
+  mimeType: string,
+  read: PayslipReader | null = payslipReaderFromEnv(process.env),
+): Promise<PayslipReading> {
+  return runPayslipReader(payslipReaderFor(data, mimeType, read), data, mimeType);
+}
+
+/**
+ * קריאת תלוש ברקע. קריאה לוקחת עד דקה וחצי, ובקשה שמחכה כל כך הרבה נחתכת בדרך:
+ * Render (דרך Cloudflare) מנתק אחרי 100 שניות, ופרוקסי כמו נטפרי עוד קודם, ומחזירים דף HTML במקום JSON.
+ * לכן ההעלאה מחזירה מזהה מיד, והמסך שואל כל שתי שניות אם התוצאה מוכנה.
+ * התוצאה נשמרת בזיכרון רק עד שהעובד מקבל אותה, ולכל היותר 5 דקות.
+ */
+interface PayslipJob {
+  owner: string | null;
+  expiresAt: number;
+  done: boolean;
+  reading?: PayslipReading;
+  error?: { status: number; message: string };
+}
+
+const PAYSLIP_JOB_TTL_MS = 5 * 60_000;
+const PAYSLIP_JOBS_KEY = "__straussPayslipJobs";
+
+function payslipJobs(): Map<string, PayslipJob> {
+  const g = globalThis as unknown as Record<string, Map<string, PayslipJob> | undefined>;
+  const jobs = (g[PAYSLIP_JOBS_KEY] ??= new Map());
+  const now = Date.now();
+  for (const [id, job] of jobs) if (job.expiresAt <= now) jobs.delete(id);
+  return jobs;
+}
+
+/** מתחיל לקרוא תלוש ברקע. בעיה בקובץ עצמו (סוג, גודל) חוזרת מיד, בלי מזהה. */
+export function startPayslipJob(
+  data: Uint8Array,
+  mimeType: string,
+  owner: string | null,
+  read: PayslipReader | null = payslipReaderFromEnv(process.env),
+): { jobId: string } {
+  const reader = payslipReaderFor(data, mimeType, read);
+  const jobId = randomUUID();
+  const job: PayslipJob = { owner, expiresAt: Date.now() + PAYSLIP_JOB_TTL_MS, done: false };
+  payslipJobs().set(jobId, job);
+  runPayslipReader(reader, data, mimeType)
+    .then((reading) => {
+      job.reading = reading;
+    })
+    .catch((err: unknown) => {
+      job.error =
+        err instanceof ChatError
+          ? { status: err.status, message: err.message }
+          : { status: 500, message: "לא הצלחתי לקרוא את התלוש. נסו שוב, או כתבו את הנתונים בצ'אט." };
+    })
+    .finally(() => {
+      job.done = true;
+    });
+  return { jobId };
+}
+
+/** האם קריאת התלוש הסתיימה. התוצאה נמסרת פעם אחת, רק למי שהעלה, ואז נמחקת מהזיכרון. */
+export function payslipJobStatus(
+  jobId: string,
+  owner: string | null,
+): { status: "pending" } | { status: "done"; reading: PayslipReading } {
+  const jobs = payslipJobs();
+  const job = jobs.get(jobId);
+  if (!job || job.owner !== owner) {
+    throw new ChatError(404, "קריאת התלוש לא נמצאה, אולי כי השרת התחיל מחדש. נסו להעלות את התלוש שוב.");
+  }
+  if (!job.done) return { status: "pending" };
+  jobs.delete(jobId);
+  if (job.error) throw new ChatError(job.error.status, job.error.message);
+  return { status: "done", reading: job.reading! };
 }
 
 /** ההשוואה האחרונה בשיחה שחושבה בפועל, עם המצב של היום שאפשר לדרג מולו */

@@ -148,6 +148,49 @@ describe("תלוש שכר", () => {
   });
 });
 
+describe("קריאת תלוש ברקע, כדי שאף בקשה לא תיחתך בדרך", () => {
+  const pdf = new Uint8Array([37, 80, 68, 70]);
+  const reading = { period: "09/2026", fields: { baseSalary: { value: 14200, source: "שכר יסוד" } }, car: {}, notes: [], via: "Claude" };
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it("ההעלאה מחזירה מזהה מיד, והתוצאה נמסרת כשהיא מוכנה, פעם אחת", async () => {
+    let finish!: () => void;
+    const read = () => new Promise<any>((resolve) => (finish = () => resolve(reading)));
+    const { jobId } = server.startPayslipJob(pdf, "application/pdf", "noa@x.com", read);
+
+    expect(server.payslipJobStatus(jobId, "noa@x.com")).toEqual({ status: "pending" });
+    finish();
+    await tick();
+    expect(server.payslipJobStatus(jobId, "noa@x.com")).toEqual({ status: "done", reading });
+    // התוצאה לא נשמרת אחרי שנמסרה
+    expect(() => server.payslipJobStatus(jobId, "noa@x.com")).toThrow(expect.objectContaining({ status: 404 }));
+  });
+
+  it("רק מי שהעלה רואה את התוצאה", async () => {
+    const { jobId } = server.startPayslipJob(pdf, "application/pdf", "noa@x.com", async () => reading as any);
+    await tick();
+    expect(() => server.payslipJobStatus(jobId, "other@x.com")).toThrow(expect.objectContaining({ status: 404 }));
+  });
+
+  it("כשכל הספקים נכשלו, ההודעה בעברית מגיעה בבדיקה הבאה", async () => {
+    const { PayslipReadError } = await import("@strauss/agent");
+    const read = async () => {
+      throw new PayslipReadError([{ provider: "Gemini", reason: "לא ענה בזמן" }]);
+    };
+    const { jobId } = server.startPayslipJob(pdf, "application/pdf", null, read);
+    await tick();
+    expect(() => server.payslipJobStatus(jobId, null)).toThrow(
+      expect.objectContaining({ status: 503, message: expect.stringContaining("Gemini: לא ענה בזמן") }),
+    );
+  });
+
+  it("בעיה בקובץ עצמו חוזרת מיד, בלי מזהה", () => {
+    expect(() => server.startPayslipJob(new Uint8Array([1]), "text/plain", null, async () => reading as any)).toThrow(
+      expect.objectContaining({ status: 415 }),
+    );
+  });
+});
+
 describe("שליחת האפשרויות למייל", () => {
   it("נבנה מהשיחה השמורה, נשלח לכתובת של המחובר, ונרשם בשיחה", async () => {
     const v = await server.startDemo("E-001");
