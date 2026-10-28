@@ -24,6 +24,8 @@ export default function middleware(req: NextRequest, event: NextFetchEvent) {
 export const config = {
   // Node ולא Edge, כדי שהגדרות הסביבה ייקראו בזמן ריצה ולא ייקבעו בזמן הבנייה
   runtime: "nodejs",
-  // בלי מסך הכניסה, הכניסה עצמה, קבצי Next ותמונות ציבוריות
-  matcher: ["/((?!login|api/auth|_next/static|_next/image|favicon.ico|icon.svg|cars/|samples/).*)"],
+  // בלי מסך הכניסה, הכניסה עצמה, קבצי Next ותמונות ציבוריות.
+  // בלי העלאת התלוש: middleware מעתיק את גוף הבקשה לפני שהוא מגיע לנתיב, ובענן ההעתקה של קובץ נכשלה
+  // ב-500 שאינו JSON, מחוץ לקוד שלנו. הנתיב בודק את הכניסה בעצמו (app/api/payslip/route.ts).
+  matcher: ["/((?!login|api/auth|api/payslip|_next/static|_next/image|favicon.ico|icon.svg|cars/|samples/).*)"],
 };

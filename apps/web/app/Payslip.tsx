@@ -26,8 +26,8 @@ const POLL_LIMIT_MS = 150_000;
 const NO_CONNECTION = "אין חיבור לשרת. בדקו את החיבור לאינטרנט ונסו שוב.";
 
 /** תשובה שאינה JSON מגיעה ממשהו שבדרך (Render, Cloudflare, סינון אינטרנט) ולא מהשרת. הקוד עוזר להבין ממי. */
-const notJson = (status: number) =>
-  `השרת לא ענה כמו שצריך (קוד ${status}). נסו שוב בעוד דקה, או כתבו את הנתונים בצ'אט.`;
+const notJson = (status: number, step: "העלאה" | "בדיקה") =>
+  `השרת לא ענה כמו שצריך (קוד ${status}, ב${step}). נסו שוב בעוד דקה, או כתבו את הנתונים בצ'אט.`;
 
 class SlipError extends Error {}
 
@@ -56,7 +56,7 @@ export function usePayslip() {
         | { status?: "pending" | "done"; reading?: PayslipReading; error?: string }
         | null;
       if (!data) {
-        if (++misses > 3) throw new SlipError(notJson(res.status));
+        if (++misses > 3) throw new SlipError(notJson(res.status, "בדיקה"));
         continue;
       }
       misses = 0;
@@ -82,7 +82,7 @@ export function usePayslip() {
     try {
       const res = await fetch("/api/payslip", { method: "POST", body: form });
       const started = (await res.json().catch(() => null)) as { jobId?: string; error?: string } | null;
-      if (!started) throw new SlipError(notJson(res.status));
+      if (!started) throw new SlipError(notJson(res.status, "העלאה"));
       if (!res.ok || !started.jobId) throw new SlipError(started.error ?? "לא הצלחתי לקרוא את התלוש.");
       const reading = await waitForReading(started.jobId, mine);
       if (reading && attempt.current === mine) setSlip({ phase: "review", reading });
